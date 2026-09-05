@@ -5,7 +5,12 @@ PASS=1
 check() {
   f=$1; ex=$2; ey=$3; ez=$4; ec=$5
   echo "═══════════════════ $f.3mf ═══════════════════"
-  INFO=$("$BS" --info out/$f.3mf 2>&1 | grep -Ev 'trace|Initializing')
+  # --info 偶发空输出(连续调用时), 重试两次
+  INFO=""
+  for try in 1 2 3; do
+    INFO=$("$BS" --info out/$f.3mf 2>&1 | grep -Ev 'trace|Initializing')
+    echo "$INFO" | grep -q '^manifold' && break
+  done
   sx=$(echo "$INFO"|awk -F' = ' '/^size_x/{printf "%g",$2}')
   sy=$(echo "$INFO"|awk -F' = ' '/^size_y/{printf "%g",$2}')
   sz=$(echo "$INFO"|awk -F' = ' '/^size_z/{printf "%g",$2}')
@@ -32,5 +37,6 @@ check() {
 check A 200 100 1.5 '#FFFFFF;#000000'
 check B 120 60  2.5 '#D42B2B;#FFFFFF'
 check C 150 100 40  '#3C7DD9;#F0F0F0'
+check F_keychain 68.388 28.97 4.2 '#1A6BD4;#FFD400'
 echo "═════════════════════════════════════════════"
 if [ $PASS = 1 ]; then echo "✅ A/B/C 全部通过两道验收命令"; else echo "❌ 存在未通过项"; fi

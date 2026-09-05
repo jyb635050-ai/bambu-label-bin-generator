@@ -11,6 +11,7 @@ FONTS = [
     ('Roboto-Black.ttf',          'Roboto Black · 粗黑无衬线'),
     ('SourceSansPro-Regular.otf', 'Source Sans Pro · 常规无衬线'),
     ('FiraSansOT-Medium.otf',     'Fira Sans Medium · 中粗无衬线'),
+    ('Pacifico-Regular.ttf',      'Pacifico · 手写连笔（挂件首选）'),
 ]
 
 def read(p):
@@ -27,6 +28,7 @@ html = html.replace('/*@@VENDOR_JSZIP@@*/',    js_lib('jszip.min.js'))
 html = html.replace('/*@@VENDOR_THREE@@*/',    js_lib('three.min.js'))
 html = html.replace('/*@@VENDOR_OPENTYPE@@*/', js_lib('opentype.min.js'))
 html = html.replace('/*@@VENDOR_EARCUT@@*/',   js_lib('earcut.min.js'))
+html = html.replace('/*@@VENDOR_CLIPPER@@*/',  js_lib('clipper.js'))
 
 font_entries = []
 for fn, label in FONTS:
