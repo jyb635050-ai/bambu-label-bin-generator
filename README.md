@@ -3,6 +3,12 @@
 双击 `label-bin-generator.html` → 浏览器打开 → 改参数 → 实时 3D 预览 → **导出 3MF** →
 Bambu Studio 双击那个 3MF 即可切片。**全程离线, 不联网, 不装任何东西。**
 
+| 名牌 · 双色（底板走 1 号槽、文字走 2 号槽） | 收纳盒 · 相邻格可合并成大格 |
+|---|---|
+| ![名牌预览](docs/screenshot-plate.png) | ![收纳盒预览](docs/screenshot-bin.png) |
+
+<sub>两张都是网页里 three.js 的实时预览截图；右图左侧 2×2 与右后方 1×2 是「合并」出来的大格，中间隔断已消失。</sub>
+
 ## 怎么用
 1. 双击 `label-bin-generator.html`（Chrome / Edge / Safari 都行）。
 2. 顶部切 **名牌** 或 **收纳盒**，左侧改参数，右侧实时出模型（左键转 / 滚轮缩 / 右键平移）。
