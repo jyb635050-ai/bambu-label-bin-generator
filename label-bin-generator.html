@@ -9188,6 +9188,21 @@ function doExport(){
   if(!UI.model) return;
   $('busy').classList.add('on');
   return write3MF(UI.model, exportName(), 'blob').then(function(r){
+    // 在 claude.ai 托管页里浏览器下载被禁用, 走平台的 downloads 能力;
+    // 它不收 .3mf 后缀, 3MF 本质是 zip, 存成 .3mf.zip, 去掉 .zip 即可双击。
+    if(window.claude && typeof window.claude.use==='function'){
+      return window.claude.use('downloads').then(function(dl){
+        if(!dl) throw {code:'unavailable'};
+        return dl.save({filename: exportName()+'.3mf.zip', data: r.out});
+      }).then(function(){
+        $('busy').classList.remove('on');
+        alert('已保存 '+exportName()+'.3mf.zip\n把文件名末尾的 .zip 删掉，就是可双击切片的 .3mf。');
+      }, function(e){
+        $('busy').classList.remove('on');
+        if(e && e.code==='declined') return;
+        alert('这个页面里无法下载（'+((e&&e.code)||'unavailable')+'）。请用本地 label-bin-generator.html 导出。');
+      });
+    }
     var url=URL.createObjectURL(r.out);
     var a=document.createElement('a');
     a.href=url; a.download=exportName()+'.3mf';
