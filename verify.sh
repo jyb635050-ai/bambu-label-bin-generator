@@ -31,12 +31,13 @@ check() {
     gt=$(grep -m1 '^; filament_type'   /tmp/v/plate_1.gcode | sed 's/.*= //')
     echo "  gcode     : filament_colour = $gc | filament_type = $gt"
     if [ "$gc" = "$ec" ]; then echo "  ✓ 颜色与所选一致 (期望 $ec)"; else echo "  ✗ 颜色不符, 期望 $ec"; PASS=0; fi
-    if [ "$gt" = "PLA;PLA" ]; then echo "  ✓ filament_type = PLA;PLA"; else echo "  ✗ filament_type=$gt"; PASS=0; fi
+    if echo "$gt" | grep -qE '^PLA(;PLA)+$'; then echo "  ✓ filament_type = PLA;PLA"; else echo "  ✗ filament_type=$gt"; PASS=0; fi
   else echo "  ✗ 没生成 plate_1.gcode"; PASS=0; fi
 }
 check A 200 100 1.5 '#FFFFFF;#000000'
 check B 120 60  2.5 '#D42B2B;#FFFFFF'
 check C 150 100 40  '#3C7DD9;#F0F0F0'
 check F_keychain 68.388 28.97 4.2 '#1A6BD4;#FFD400'
+check G_keychain_lego 84.172 26.328 3.6 '#D7261E;#FFC800;#141414;#FFFFFF'
 echo "═════════════════════════════════════════════"
 if [ $PASS = 1 ]; then echo "✅ A/B/C 全部通过两道验收命令"; else echo "❌ 存在未通过项"; fi

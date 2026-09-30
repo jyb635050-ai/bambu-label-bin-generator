@@ -21,6 +21,7 @@
 | B 名牌 120×60×2 红底白字 3行 | 120×60×2.5 ✓ | yes | Success rc=0 | `#D42B2B;#FFFFFF` ✓ | PLA;PLA ✓ |
 | C 收纳盒 150×100×40 3×2 壁厚2 | 150×100×40 ✓ | yes | Success rc=0 | `#3C7DD9;#F0F0F0` ✓ | PLA;PLA ✓ |
 | F 名字挂件 Pacifico "Alice" 描边2.2 底板3 凸起1.2 | 68.388×28.97×4.2 ✓ | yes | Success rc=0 | `#1A6BD4;#FFD400` ✓ | PLA;PLA ✓ |
+| G 叠色挂件 "NOAH" 乐高风 4 层 倾斜10° | 84.172×26.328×3.6 ✓ | yes | Success rc=0 | `#D7261E;#FFC800;#141414;#FFFFFF` ✓ 4 槽均出料 | PLA×4 ✓ |
 附加: D_merged(合并格 180×120×40) / E_uploaded(上传字体+圆角 150×80×2.3) 同样双命令通过。
 注: 本机 CLI 不往 stdout 打 "error: Success", 成功信号在 `outputdir/result.json`
 的 `error_string="Success."` + `return_code=0`; verify.sh 读的就是它。
@@ -62,6 +63,13 @@ reference/ 三个文件一字未改。实测边界: 200×100 ✓ / 240×200 ✓ 
   所以先把底板与挂环所在水平带求交, 拿到这一带里底板的真实边界, 再搭最短的一截颈。
 - 底部连接条挂在**基线**上, 不是整体 bbox 底 —— 挂 bbox 底会只搭到 g/y 这种下伸部上。
 - 状态栏显示「连通块 N」; N>1 说明打出来是散的, 会提示勾连接条或加大描边。
+
+## 多色 (>2 卷料) 的工程配置
+模板只有 2 卷料。`projectSettings(colors)` 按卷料数 N 扩展: 长度为 2 的数组都是逐卷料的
+(例外: machine_* 是普通/静音两档, start_end_points), 冲刷矩阵 N×N、冲刷向量 2N,
+different_settings_to_system / inherits_group 为 [工艺, 各卷料…, 机器]。
+先用 `tools/mk_ncolor.py` 生成 4 层叠色方块实测过, Bambu 切片 4 个槽都有出料克重。
+叠色挂件每层 = 字形按该层外扩量偏移 ∩ 下一层区域, z 区间首尾相接不重叠。
 
 ## 几何构造 (水密的根据)
 不变量: **每条边恰好被两个三角形以相反方向使用**。页面每次重建都跑 `checkMesh` 验这条,

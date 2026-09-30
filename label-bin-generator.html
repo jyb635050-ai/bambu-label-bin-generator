@@ -68,6 +68,11 @@ button.pri{background:linear-gradient(180deg,var(--acc),var(--acc2));border-colo
 .sw{display:flex;align-items:center;gap:7px}
 .sw input[type=text]{width:80px;font-family:ui-monospace,Menlo,monospace;text-transform:uppercase}
 .mini{font-size:11px;padding:5px 9px}
+.lyh,.lyr{display:grid;grid-template-columns:22px 1fr 64px 64px;gap:6px;align-items:center}
+.lyh{color:#6b7688;font-size:10.5px;margin:2px 0 3px}
+.lyr{margin:5px 0}
+.lyr .sw input[type=text]{width:74px}
+.lyr.off{opacity:.42}
 a{color:var(--acc)}
 </style>
 </head>
@@ -157,14 +162,20 @@ STATION 07</textarea>
           <p class="hint">手写连笔体（Pacifico）字母天然相连，最适合做挂件。用不连笔的字体要靠描边或底部连接条串起来。</p>
           <div class="row"><label>字号 em</label><input type="number" id="k_size" value="26" min="4" max="150" step="0.5"><span class="u">mm</span></div>
           <div class="row"><label>字间距</label><input type="number" id="k_track" value="0" min="-20" max="40" step="0.5"><span class="u">%</span></div>
+          <div class="row"><label>倾斜</label><input type="number" id="k_slant" value="0" min="-30" max="30" step="1"><span class="u">°</span></div>
         </fieldset>
 
-        <fieldset><legend>描边底板</legend>
-          <div class="row"><label>描边宽</label><input type="number" id="k_outline" value="2" min="0.4" max="20" step="0.1"><span class="u">mm</span></div>
-          <div class="row"><label>底板厚</label><input type="number" id="k_thk" value="3" min="0.4" max="20" step="0.2"><span class="u">mm</span></div>
-          <div class="row"><label>字凸起</label><input type="number" id="k_emb" value="1.2" min="0" max="10" step="0.1"><span class="u">mm</span></div>
-          <div class="row"><label>连接条</label><input type="checkbox" id="k_bar" style="width:auto"><span class="hint" style="margin:0">底部加一条把字串起来</span></div>
-          <p class="hint">字凸起填 0 = 单色平板挂件（只有描边轮廓）。</p>
+        <fieldset><legend>叠色层 · 从下往上</legend>
+          <div class="btns" style="margin:0 0 6px">
+            <button class="mini" data-preset="lego">乐高风 4 色</button>
+            <button class="mini" data-preset="three">3 色</button>
+            <button class="mini" data-preset="two">双色</button>
+            <button class="mini" data-preset="one">单色</button>
+          </div>
+          <div class="lyh"><span></span><span>槽 · 颜色</span><span>外扩</span><span>厚度</span></div>
+          <div id="k_layers"></div>
+          <div class="row"><label>连接条</label><input type="checkbox" id="k_bar" style="width:auto"><span class="hint" style="margin:0">底层加一条把字串起来</span></div>
+          <p class="hint">每层 = 字形向外扩一圈，越往上越窄，露出一道道色边。外扩 0 就是字本身。第 1 层是底板（带挂环）；第 N 层走 N 号料槽，A1 + AMS lite 最多 4 色。</p>
         </fieldset>
 
         <fieldset><legend>挂环</legend>
@@ -174,10 +185,6 @@ STATION 07</textarea>
           <div class="row"><label>位置</label><select id="k_side"><option value="left">左端</option><option value="right">右端</option></select></div>
         </fieldset>
 
-        <fieldset><legend>颜色 · 双色</legend>
-          <div class="row"><label>底板 槽1</label><div class="sw"><input type="color" id="k_c1" value="#1A6BD4"><input type="text" id="k_c1t" value="#1A6BD4"></div></div>
-          <div class="row"><label>文字 槽2</label><div class="sw"><input type="color" id="k_c2" value="#FFD400"><input type="text" id="k_c2t" value="#FFD400"></div></div>
-        </fieldset>
       </div>
 
       <fieldset><legend>导出</legend>
@@ -8551,91 +8558,94 @@ function pieceCount(rings){
   return n;
 }
 
-/* ================================================== 名字挂件 builder
-   字形并集 -> 外扩描边成底板 -> 并入挂环(+连接颈) -> 挖挂孔 -> 挤出;
-   字凸起 >0 时字单独作为 2 号槽部件叠在底板上。                              */
+/* ================================================== 名字挂件 builder (多层叠色)
+   字形并集 -> 每层按自己的外扩量偏移 -> 逐层向上叠, 每层一个料槽。
+   第 1 层是底板: 并挂环(+连接颈)、可选底部连接条、挖挂孔。
+   上层 = 自身外扩区域 ∩ 下一层区域, 保证不悬空也不压过挂孔;
+   各层 z 区间首尾相接互不重叠 (同名牌的"字底贴板面"一样)。 */
 function buildKeychain(P){
   var warn=[], err=[], info={};
-  var empty=[{name:'tag', mesh:new Mesh(), slot:1, color:P.c1}];
-  if(!P.font){ err.push('字体未就绪。'); return {parts:empty,warnings:warn,errors:err,info:info,size:[0,0,0]}; }
-  var txt=String(P.text).replace(/[\r\n]+/g,' ').trim();
-  if(!txt){ err.push('请输入要做的名字。'); return {parts:empty,warnings:warn,errors:err,info:info,size:[0,0,0]}; }
-
-  var lay = layoutText(P.font, txt, P.size, 1, P.track, 'center');
-  if(!lay.bbox || !lay.rings.length){ err.push('这些字符在当前字体里没有字形。');
-    return {parts:empty,warnings:warn,errors:err,info:info,size:[0,0,0]}; }
-
-  var solid = clUnionNonZero(lay.rings);            // 填充后的字
-  if(!solid.length){ err.push('字形并集为空。');
-    return {parts:empty,warnings:warn,errors:err,info:info,size:[0,0,0]}; }
-
-  var plate = clOffset(solid, P.outline);           // 外扩出描边底板
-  var bb = polyBBox(plate);
-
-  // 可选: 底部连接条 (字不相连时用来串成一体)
-  if(P.bar){
-    // 基线在 y=0, 描边把底板往下扩了 outline; 条子压在基线这一带才能串上每个字母,
-    // 挂在整体 bbox 底会只搭到 g/y 这种下伸部。
-    var bh = Math.max(1.2, P.outline*1.4);
-    var by = -P.outline;
-    plate = clUnion(plate, [rectPoly(bb.x0-0.01, by-0.01, bb.x1+0.01, by+bh)]);
-    bb = polyBBox(plate);
+  var empty=[{name:'tag', mesh:new Mesh(), slot:1, color:'#FFFFFF'}];
+  function fail(m){ err.push(m); return {parts:empty,warnings:warn,errors:err,info:info,size:[0,0,0]}; }
+  var L=P.layers.filter(function(l){ return l.on; });
+  if(!L.length) return fail('至少要开一层。');
+  for(var k=1;k<L.length;k++){
+    if(!(L[k].offset < L[k-1].offset)) return fail('第 '+(k+1)+' 层外扩量必须小于下面一层（每层都要比下层窄）。');
+    if(L[k-1].offset-L[k].offset < 0.8) warn.push('第 '+k+'/'+(k+1)+' 层外扩量只差 '+(L[k-1].offset-L[k].offset).toFixed(1)+'mm，露出的色边不到两道线宽(0.8)，可能印不出来。');
   }
+  if(!P.font) return fail('字体未就绪。');
+  var txt=String(P.text).replace(/[\r\n]+/g,' ').trim();
+  if(!txt) return fail('请输入要做的名字。');
+  var lay=layoutText(P.font, txt, P.size, 1, P.track, 'center');
+  if(!lay.bbox || !lay.rings.length) return fail('这些字符在当前字体里没有字形。');
 
-  // 挂环: 圆盘 + 连接颈, 保证和底板连成一块
+  var raw=lay.rings;
+  if(P.slant){                                     // 斜体: x += y·tanθ
+    var tg=Math.tan(P.slant*Math.PI/180);
+    raw=raw.map(function(r){ return r.map(function(p){ return [p[0]+p[1]*tg, p[1]]; }); });
+  }
+  var solid=clUnionNonZero(raw);
+  if(!solid.length) return fail('字形并集为空。');
+
+  // ---- 第 1 层: 底板 + 挂环 ----
+  var regs=[];
+  var base = L[0].offset>0 ? clOffset(solid, L[0].offset) : solid;
+  var bb=polyBBox(base);
+  if(P.bar){
+    var bh=Math.max(1.2, L[0].offset*1.4), by=-L[0].offset;
+    base=clUnion(base,[rectPoly(bb.x0-0.01, by-0.01, bb.x1+0.01, by+bh)]);
+    bb=polyBBox(base);
+  }
   var R=P.ringD/2, r=P.ringHole/2;
-  if(r >= R-0.4) { warn.push('挂孔太大, 已收到外径的一半以内。'); r = Math.max(0.6, R-0.8); }
+  if(r >= R-0.4){ warn.push('挂孔太大，已收到外径的一半以内。'); r=Math.max(0.6, R-0.8); }
   var cy=(bb.y0+bb.y1)/2;
   var cx = P.side==='right' ? (bb.x1 + R - P.ringInset) : (bb.x0 - R + P.ringInset);
-  var neckH = Math.max(2.2, P.outline*1.6);
-  // bbox 的左右边缘未必落在挂环那个高度上(手写体的甩尾常在别的高度),
-  // 所以先把底板和挂环所在的水平带求交, 拿到这一带里底板真正的边界, 再搭最短的颈。
-  var strip = rectPoly(bb.x0-R*3, cy-neckH/2, bb.x1+R*3, cy+neckH/2);
-  var band  = clBool(plate, [strip], ClipperLib.ClipType.ctIntersection);
-  var reach = band.length ? polyBBox(band) : bb;
-  var neck  = P.side==='right'
-      ? rectPoly(Math.min(reach.x1-0.8, cx), cy-neckH/2, Math.max(reach.x1-0.8, cx), cy+neckH/2)
-      : rectPoly(Math.min(reach.x0+0.8, cx), cy-neckH/2, Math.max(reach.x0+0.8, cx), cy+neckH/2);
-  plate = clUnion(plate, [circlePoly(cx,cy,R)]);
-  plate = clUnion(plate, [neck]);
-
-  var pieces = pieceCount(plate);
-  if(pieces>1){
-    if(P.bar) warn.push('底板仍分成 '+pieces+' 块（字之间断开）。请加大描边宽度，或换连笔的手写体。');
-    else      warn.push('底板分成 '+pieces+' 块（字之间断开），打出来是散的。勾上「底部连接条」或加大描边宽度。');
-  }
+  var neckH=Math.max(2.2, L[0].offset*1.6);
+  // bbox 左右边缘未必落在挂环那个高度上, 先和挂环所在水平带求交拿真实边界再搭颈
+  var strip=rectPoly(bb.x0-R*3, cy-neckH/2, bb.x1+R*3, cy+neckH/2);
+  var band=clBool(base,[strip],ClipperLib.ClipType.ctIntersection);
+  var reach=band.length? polyBBox(band) : bb;
+  var neck = P.side==='right'
+    ? rectPoly(Math.min(reach.x1-0.8,cx), cy-neckH/2, Math.max(reach.x1-0.8,cx), cy+neckH/2)
+    : rectPoly(Math.min(reach.x0+0.8,cx), cy-neckH/2, Math.max(reach.x0+0.8,cx), cy+neckH/2);
+  base=clUnion(base,[circlePoly(cx,cy,R)]);
+  base=clUnion(base,[neck]);
+  var pieces=pieceCount(base);
+  if(pieces>1) warn.push('底板分成 '+pieces+' 块（字之间断开），打出来是散的。'+
+    (P.bar?'加大底层外扩量，或换连笔字体。':'勾上「底部连接条」或加大底层外扩量。'));
   info.pieces=pieces;
+  var hole=[circlePoly(cx,cy,r)];
+  base=clDiff(base,hole);
+  if(!base.length) return fail('挖孔后底板为空，请调小挂孔。');
+  regs.push(base);
 
-  plate = clDiff(plate, [circlePoly(cx,cy,r)]);     // 挖挂孔
-  if(!plate.length){ err.push('挖孔后底板为空, 请调小挂孔。');
-    return {parts:empty,warnings:warn,errors:err,info:info,size:[0,0,0]}; }
+  // ---- 上面各层 ----
+  for(var i=1;i<L.length;i++){
+    var g = L[i].offset>0 ? clOffset(solid, L[i].offset) : solid;
+    g = clBool(g, regs[i-1], ClipperLib.ClipType.ctIntersection);
+    if(!g.length){ warn.push('第 '+(i+1)+' 层与下层没有交集，已跳过。'); regs.push([]); continue; }
+    regs.push(g);
+  }
 
-  // 归零: 整体挪到第一象限
-  var fb = polyBBox(plate);
-  function shift(rs){
-    var o=[];
-    for(var i=0;i<rs.length;i++){
-      var q=[];
-      for(var j=0;j<rs[i].length;j++) q.push([rs[i][j][0]-fb.x0, rs[i][j][1]-fb.y0]);
-      o.push(q);
+  // 归零
+  var fb=polyBBox(base);
+  function shift(rs){ return rs.map(function(q){ return q.map(function(p){ return [p[0]-fb.x0, p[1]-fb.y0]; }); }); }
+  info.w=fb.x1-fb.x0; info.h=fb.y1-fb.y0; info.layers=L.length;
+
+  var parts=[], z=0;
+  for(var j=0;j<L.length;j++){
+    var z1=z+L[j].height;
+    if(regs[j].length){
+      var m=new Mesh(), gs=groupRings(shift(regs[j]));
+      for(var t=0;t<gs.length;t++) extrudeGroup(m, gs[t].outer, gs[t].holes, z, z1);
+      if(m.nt()>0) parts.push({name:'layer '+(j+1), mesh:m, slot:j+1, color:L[j].color});
     }
-    return o;
+    z=z1;
   }
-  var plateS=shift(plate), solidS=shift(solid);
-  info.w=fb.x1-fb.x0; info.h=fb.y1-fb.y0;
-
-  var mPlate=new Mesh(), gs=groupRings(plateS), g;
-  for(g=0;g<gs.length;g++) extrudeGroup(mPlate, gs[g].outer, gs[g].holes, 0, P.thk);
-
-  var parts=[{name:'tag plate', mesh:mPlate, slot:1, color:P.c1}];
-  if(P.emb>0){
-    var mText=new Mesh(), ts=groupRings(solidS);
-    for(g=0;g<ts.length;g++) extrudeGroup(mText, ts[g].outer, ts[g].holes, P.thk, P.thk+P.emb);
-    if(mText.nt()>0) parts.push({name:'tag text', mesh:mText, slot:2, color:P.c2});
-  }
-  if(P.thk<1) warn.push('挂件底板 '+P.thk+'mm 偏薄, 钥匙串上容易掰断, 建议 ≥2mm。');
-  return {parts:parts, warnings:warn, errors:err, info:info,
-          size:[info.w, info.h, P.thk+(P.emb>0?P.emb:0)]};
+  if(L[0].height<1.2) warn.push('底层只有 '+L[0].height+'mm，挂钥匙容易掰断，建议 ≥1.6mm。');
+  info.z=z;
+  return {parts:parts, warnings:warn, errors:err, info:info, size:[info.w, info.h, z],
+          slotColors:L.map(function(l){ return l.color; })};
 }
 
 /* ================================================ 收纳盒 builder */
@@ -8827,9 +8837,32 @@ function modelSettingsXML(parts, objName){
 
 /* 只动 filament_colour(两个槽) 与 printable_area(修模板里 180×180 的错值,
    取自同目录已验证资产 golden_label.3mf 的 A1 真值 256×256) */
+/* 模板是 2 卷料。叠色挂件最多要 4 卷 (A1 + AMS lite 4 槽), 按卷料扩展:
+   长度为 2 的数组都是逐卷料的, 例外是 machine_*(普通/静音两档) 与 start_end_points;
+   冲刷矩阵扩成 N×N、冲刷向量扩成 2N; different_settings_to_system / inherits_group
+   是 [工艺, 各卷料…, 机器] 结构。已用 4 层叠色方块实测 Bambu 按 4 个槽切片。 */
 function projectSettings(colors){
   var d = JSON.parse(JSON.stringify(PROJECT_SETTINGS_TEMPLATE));
-  d.filament_colour = [normHex(colors[0]), normHex(colors[1])];
+  var N = Math.max(2, colors.length);
+  if(N>2){
+    Object.keys(d).forEach(function(k){
+      var v=d[k];
+      if(!Array.isArray(v) || v.length!==2) return;
+      if(k.indexOf('machine_')===0 || k==='start_end_points') return;
+      for(var i=2;i<N;i++) v.push(v[1]);
+    });
+    var off=d.flush_volumes_matrix[1], m=[];
+    for(var i=0;i<N;i++) for(var j=0;j<N;j++) m.push(i===j?'0':off);
+    d.flush_volumes_matrix=m;
+    var fv=[]; for(var q=0;q<2*N;q++) fv.push(d.flush_volumes_vector[0]);
+    d.flush_volumes_vector=fv;
+    ['different_settings_to_system','inherits_group'].forEach(function(k){
+      var v=d[k]; if(v.length!==3) return;
+      var nv=[v[0]]; for(var i=0;i<N;i++) nv.push(''); nv.push(v[2]); d[k]=nv;
+    });
+  }
+  var cs=[]; for(var c=0;c<N;c++) cs.push(normHex(colors[c]||'#FFFFFF'));
+  d.filament_colour = cs;
   d.printable_area  = ['0x0','256x0','256x256','0x256'];
   return JSON.stringify(d, null, 1);
 }
@@ -8853,9 +8886,13 @@ function placeOnBed(parts){
 function write3MF(model, objName, type){
   var parts = model.parts.filter(function(p){ return p.mesh.nt()>0; });
   placeOnBed(parts);
+  var nF=2, i;
+  for(i=0;i<parts.length;i++) nF=Math.max(nF, parts[i].slot);
   var colors=['#FFFFFF','#000000'];
-  for(var i=0;i<parts.length;i++) colors[parts[i].slot-1] = parts[i].color;
+  for(i=2;i<nF;i++) colors.push('#FFFFFF');
+  for(i=0;i<parts.length;i++) colors[parts[i].slot-1] = parts[i].color;
   if(parts.length===1) colors[1] = model.slot2 || colors[1];
+  if(model.slotColors) for(i=0;i<model.slotColors.length;i++) colors[i]=model.slotColors[i];
 
   // createFolders:false => 只留 5 个条目, 不生成 _rels/ 3D/ Metadata/ 目录项
   var zip = new JSZip(), NF = {createFolders:false};
@@ -9047,11 +9084,48 @@ function binParams(){
            cols:Math.max(1,Math.round(num('b_cols'))), rows:Math.max(1,Math.round(num('b_rows'))),
            merges:UI.merges.slice(), c1:$('b_c1t').value, c2:$('b_c2t').value };
 }
+/* 叠色层预设: [外扩mm, 厚度mm, 颜色] 从下往上 */
+var LAYER_PRESETS={
+  lego: [[4.4,2.0,'#D7261E'],[3.0,0.4,'#FFC800'],[1.6,0.4,'#141414'],[0,0.8,'#FFFFFF']],
+  three:[[3.4,2.0,'#1A6BD4'],[1.6,0.6,'#FFFFFF'],[0,0.8,'#FFD400']],
+  two:  [[2.2,3.0,'#1A6BD4'],[0,1.2,'#FFD400']],
+  one:  [[2.2,3.0,'#1A6BD4']]
+};
+var MAXL=4;
+function drawLayers(){
+  var box=$('k_layers'); if(box.childNodes.length) return;
+  for(var i=0;i<MAXL;i++){
+    var row=document.createElement('div'); row.className='lyr'; row.id='kl'+i;
+    row.innerHTML='<input type="checkbox" id="kl_on'+i+'" style="width:auto" title="启用第 '+(i+1)+' 层">'+
+      '<div class="sw"><b style="color:#6b7688;font-size:11px;width:12px">'+(i+1)+'</b>'+
+      '<input type="color" id="kl_c'+i+'"><input type="text" id="kl_ct'+i+'"></div>'+
+      '<input type="number" id="kl_o'+i+'" min="0" max="20" step="0.2" title="外扩 mm">'+
+      '<input type="number" id="kl_h'+i+'" min="0.2" max="20" step="0.2" title="厚度 mm">';
+    box.appendChild(row);
+  }
+}
+function applyPreset(name){
+  var ps=LAYER_PRESETS[name]||LAYER_PRESETS.lego;
+  for(var i=0;i<MAXL;i++){
+    var on=i<ps.length, q=on?ps[i]:[0,0.4,'#FFFFFF'];
+    $('kl_on'+i).checked=on; $('kl_o'+i).value=q[0]; $('kl_h'+i).value=q[1];
+    $('kl_c'+i).value=q[2]; $('kl_ct'+i).value=q[2];
+  }
+  syncLayerRows();
+}
+function syncLayerRows(){
+  for(var i=0;i<MAXL;i++) $('kl'+i).classList.toggle('off', !$('kl_on'+i).checked);
+}
+function keyLayers(){
+  var a=[];
+  for(var i=0;i<MAXL;i++) a.push({on:$('kl_on'+i).checked, offset:num('kl_o'+i), height:num('kl_h'+i),
+                                   color:normHex($('kl_ct'+i).value)});
+  return a;
+}
 function keyParams(){
-  return { text:$('k_text').value, size:num('k_size'), track:num('k_track'),
-           outline:num('k_outline'), thk:num('k_thk'), emb:num('k_emb'), bar:$('k_bar').checked,
-           ringD:num('k_ringD'), ringHole:num('k_ringHole'), ringInset:num('k_ringInset'),
-           side:$('k_side').value, c1:$('k_c1t').value, c2:$('k_c2t').value, font:UI.fontSel };
+  return { text:$('k_text').value, size:num('k_size'), track:num('k_track'), slant:num('k_slant'),
+           bar:$('k_bar').checked, ringD:num('k_ringD'), ringHole:num('k_ringHole'),
+           ringInset:num('k_ringInset'), side:$('k_side').value, layers:keyLayers(), font:UI.fontSel };
 }
 /* 供自动化/复跑: 直接写回 DOM 再走同一条链路 */
 function setParams(tab, o){
@@ -9061,21 +9135,24 @@ function setParams(tab, o){
            leading:'p_lead',track:'p_track',margin:'p_marg',align:'p_align',c1:'p_c1t',c2:'p_c2t',fname:'fname'},
     bin:  {len:'b_len',wid:'b_wid',hgt:'b_hgt',wall:'b_wall',bot:'b_bot',radius:'b_rad',
            cols:'b_cols',rows:'b_rows',c1:'b_c1t',c2:'b_c2t',fname:'fname'},
-    key:  {text:'k_text',size:'k_size',track:'k_track',outline:'k_outline',thk:'k_thk',emb:'k_emb',
-           ringD:'k_ringD',ringHole:'k_ringHole',ringInset:'k_ringInset',side:'k_side',
-           c1:'k_c1t',c2:'k_c2t',fname:'fname'}
+    key:  {text:'k_text',size:'k_size',track:'k_track',slant:'k_slant',
+           ringD:'k_ringD',ringHole:'k_ringHole',ringInset:'k_ringInset',side:'k_side',fname:'fname'}
   };
   var map = maps[tab];
   for(var k in o){
     if(k==='merges'){ UI.merges=o[k].slice(); continue; }
+    if(k==='preset'){ applyPreset(o[k]); continue; }
+    if(k==='layers'){ for(var li=0;li<MAXL;li++){ var L=o[k][li];
+        $('kl_on'+li).checked=!!L; if(L){ $('kl_o'+li).value=L[0]; $('kl_h'+li).value=L[1];
+        $('kl_c'+li).value=normHex(L[2]); $('kl_ct'+li).value=normHex(L[2]); } } syncLayerRows(); continue; }
     if(k==='fit'){ $('p_fit').checked=!!o[k]; continue; }
     if(k==='bar'){ $('k_bar').checked=!!o[k]; continue; }
     if(k==='font'){ pickFont(o[k]); continue; }
     if(map[k]) $(map[k]).value=o[k];
   }
-  var pfx = tab==='plate'?'p_':(tab==='bin'?'b_':'k_');
-  if(o.c1!==undefined) $(pfx+'c1').value=normHex(o.c1);
-  if(o.c2!==undefined) $(pfx+'c2').value=normHex(o.c2);
+  var pfx = tab==='plate'?'p_':(tab==='bin'?'b_':null);
+  if(pfx && o.c1!==undefined) $(pfx+'c1').value=normHex(o.c1);
+  if(pfx && o.c2!==undefined) $(pfx+'c2').value=normHex(o.c2);
   if(tab==='bin') drawGrid();
   rebuild();
   return true;
@@ -9086,10 +9163,13 @@ function validate(P, tab){
   var e=[], w=[];
   if(tab==='key'){
     if(P.size<=0) e.push('字号必须大于 0。');
-    if(P.outline<0.4) e.push('描边宽至少 0.4mm（喷嘴直径）。');
-    if(P.thk<0.4) e.push('底板厚至少 0.4mm。');
     if(P.ringHole>=P.ringD) e.push('挂孔径必须小于挂环外径。');
-    if(P.emb>0 && P.emb<0.2) w.push('字凸起 '+P.emb+'mm 小于一层高(0.2)，可能印不出来。');
+    var on=P.layers.filter(function(l){return l.on;});
+    if(on.length && on[0].offset<0.4) e.push('第 1 层（底板）外扩至少 0.4mm，否则挂环连不上。');
+    on.forEach(function(l,i){
+      if(l.height<0.2) e.push('第 '+(i+1)+' 层厚度至少 0.2mm（一层层高）。');
+      if(l.offset<0) e.push('外扩量不能为负。');
+    });
     return {errors:e, warnings:w};
   }
   var L=P.len, W=P.wid;
@@ -9163,11 +9243,12 @@ function rebuild(){
     html += '字形块 '+model.info.glyphGroups+' · 文字 '+model.info.textW.toFixed(1)+'×'+model.info.textH.toFixed(1)+'mm'+
             (model.info.scale<0.999? ' · 缩放 '+(model.info.scale*100).toFixed(0)+'%':'')+'<br>';
   if(tab==='key' && model.info.w!==undefined)
-    html += '外形 '+model.info.w.toFixed(1)+'×'+model.info.h.toFixed(1)+'mm · 连通块 '+
+    html += model.info.layers+' 层叠色 · 外形 '+model.info.w.toFixed(1)+'×'+model.info.h.toFixed(1)+'mm · 连通块 '+
             (model.info.pieces===1? '<b>1 (一体)</b>' : '<b style="color:#ffb648">'+model.info.pieces+'</b>')+'<br>';
   if(tab==='bin' && model.info.cells!==undefined)
     html += '格数 '+model.info.cells+' · 基本格净 '+model.info.cw.toFixed(1)+'×'+model.info.ch.toFixed(1)+'mm<br>';
-  html += '槽1 '+normHex(P.c1)+' · 槽2 '+normHex(P.c2)+' · PLA/PLA';
+  if(tab==='key') html += model.parts.map(function(q){return '槽'+q.slot+' '+normHex(q.color);}).join(' · ')+' · 全 PLA';
+  else html += '槽1 '+normHex(P.c1)+' · 槽2 '+normHex(P.c2)+' · PLA/PLA';
   $('stat').innerHTML=html;
 
   var m=[];
@@ -9351,7 +9432,7 @@ function boot(){
 
   var ids=['p_len','p_wid','p_thk','p_rad','p_text','p_emb','p_size','p_lead','p_track','p_marg','p_align','p_fit',
            'b_len','b_wid','b_hgt','b_wall','b_bot','b_rad','b_cols','b_rows',
-           'k_text','k_size','k_track','k_outline','k_thk','k_emb','k_bar',
+           'k_text','k_size','k_track','k_slant','k_bar',
            'k_ringD','k_ringHole','k_ringInset','k_side'];
   for(var i=0;i<ids.length;i++){
     var el=$(ids[i]);
@@ -9364,7 +9445,15 @@ function boot(){
   });
   pairColor('p_c1','p_c1t'); pairColor('p_c2','p_c2t');
   pairColor('b_c1','b_c1t'); pairColor('b_c2','b_c2t');
-  pairColor('k_c1','k_c1t'); pairColor('k_c2','k_c2t');
+  drawLayers(); applyPreset('lego');
+  for(var li=0;li<MAXL;li++){
+    pairColor('kl_c'+li,'kl_ct'+li);
+    ['kl_o'+li,'kl_h'+li].forEach(function(id){ $(id).addEventListener('input',scheduleRebuild); });
+    $('kl_on'+li).addEventListener('change',function(){ syncLayerRows(); scheduleRebuild(); });
+  }
+  document.querySelectorAll('[data-preset]').forEach(function(b){
+    b.addEventListener('click',function(){ applyPreset(this.dataset.preset); rebuild(); });
+  });
 
   var tabs=document.querySelectorAll('.tab');
   for(var t=0;t<tabs.length;t++) tabs[t].addEventListener('click',function(){
