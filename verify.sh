@@ -38,6 +38,7 @@ check A 200 100 1.5 '#FFFFFF;#000000'
 check B 120 60  2.5 '#D42B2B;#FFFFFF'
 check C 150 100 40  '#3C7DD9;#F0F0F0'
 check F_keychain 68.388 28.97 4.2 '#1A6BD4;#FFD400'
+check H_stencil 200 100 2 '#F2F2F0;#000000'
 check G_keychain_lego 84.172 26.328 3.6 '#D7261E;#FFC800;#141414;#FFFFFF'
 echo "═════════════════════════════════════════════"
 if [ $PASS = 1 ]; then echo "✅ A/B/C 全部通过两道验收命令"; else echo "❌ 存在未通过项"; fi

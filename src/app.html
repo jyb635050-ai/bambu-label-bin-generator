@@ -100,6 +100,9 @@ a{color:var(--acc)}
           <div class="row"><label style="width:auto">多行文字</label></div>
           <textarea id="p_text">ASSEMBLY LINE 3
 STATION 07</textarea>
+          <div class="row"><label>风格</label><select id="p_style"><option value="raised">双色凸字</option><option value="stencil">单色镂空（字穿透）</option></select></div>
+          <div class="row" id="p_bridge_row" style="display:none"><label>连接桥宽</label><input type="number" id="p_bridge" value="1.2" min="0.6" max="6" step="0.1"><span class="u">mm</span></div>
+          <p class="hint" id="p_style_hint" style="display:none">字整个挖穿、只用 1 号料。O / A / B / 8 等字母中间的"孤岛"会自动加一道竖向细桥连回底板，否则会掉出来。</p>
           <div class="row"><label>字凸起</label><input type="number" id="p_emb" value="0.5" min="0.1" max="20" step="0.1"><span class="u">mm</span></div>
           <div class="row"><label>字号 em</label><input type="number" id="p_size" value="26" min="1" max="200" step="0.5"><span class="u">mm</span></div>
           <div class="row"><label>行距 ×</label><input type="number" id="p_lead" value="1.25" min="0.6" max="4" step="0.05"><span class="u"></span></div>
@@ -788,15 +791,40 @@ function buildPlate(P){
         for(var j=0;j<r.length;j++) nr[j]=[(r[j][0]-cxT)*s + L/2, (r[j][1]-cyT)*s + W/2];
         var cl=cleanRing(nr,1e-4); if(cl) rings.push(cl);
       }
+      if(P.style==='stencil'){
+        // 镂空: 底板 − 字。字腔(O/A/B 中间)挖穿后会成孤岛掉落 ->
+        // 每个孤岛在自身中线加一道竖桥, 只跨它所在那个字形的高度, 不波及别的行。
+        var region=clUnionNonZero(rings), outs=[], isl=[];
+        region.forEach(function(q){ (signedArea(q)>0?outs:isl).push(q); });
+        var bw=Math.max(0.6, P.bridge), strips=[];
+        isl.forEach(function(h){
+          var hb=polyBBox([h]), host=null, ha=Infinity;
+          outs.forEach(function(o){ var a=Math.abs(signedArea(o));
+            if(a<ha && pointInPoly(interiorPoint(h), o)){ ha=a; host=o; } });
+          var ob=host? polyBBox([host]) : hb, cxI=(hb.x0+hb.x1)/2;
+          strips.push(rectPoly(cxI-bw/2, ob.y0-0.5, cxI+bw/2, ob.y1+0.5));
+        });
+        var cut = strips.length? clDiff(region, strips) : region;
+        var plateR = clDiff([roundedRect(0,0,L,W,P.radius)], cut);
+        plate=new Mesh();
+        var pg=groupRings(plateR);
+        for(var g2=0;g2<pg.length;g2++) extrudeGroup(plate, pg[g2].outer, pg[g2].holes, 0, T);
+        info.glyphGroups=outs.length; info.bridges=strips.length;
+        var pc=pieceCount(plateR);
+        if(pc>1) warn.push('镂空后仍有 '+pc+' 块互不相连，会掉出来，请加大桥宽。');
+        if(bw<1) warn.push('连接桥 '+bw+'mm 偏细，可能一掰就断，建议 ≥1mm。');
+        if(T<1.2) warn.push('镂空板只有 '+T+'mm，字间细条容易断，建议 ≥1.5mm。');
+      } else {
       var groups=groupRings(rings);
       info.glyphGroups=groups.length;
       for(var g=0;g<groups.length;g++) extrudeGroup(textMesh, groups[g].outer, groups[g].holes, T, T+E);
+      }
       if(s<0.999) warn.push('文字已自动缩放到 '+(s*100).toFixed(0)+'% 以适配边距。');
     }
   }
   var parts=[{name:'plate', mesh:plate, slot:1, color:P.c1}];
   if(textMesh.nt()>0) parts.push({name:'text', mesh:textMesh, slot:2, color:P.c2});
-  else warn.push('没有可挤出的文字（文本为空或字体未就绪），本次只导出底板。');
+  else if(P.style!=='stencil') warn.push('没有可挤出的文字（文本为空或字体未就绪），本次只导出底板。');
   return {parts:parts, warnings:warn, errors:err, info:info,
           size:[L,W,T+(textMesh.nt()>0?E:0)]};
 }
@@ -1423,7 +1451,8 @@ function loadFont(key){
 
 /* ---- 参数读取 ---- */
 function plateParams(){
-  return { len:num('p_len'), wid:num('p_wid'), thk:num('p_thk'), radius:num('p_rad'),
+  return { style:$('p_style').value, bridge:num('p_bridge'),
+           len:num('p_len'), wid:num('p_wid'), thk:num('p_thk'), radius:num('p_rad'),
            text:$('p_text').value, emb:num('p_emb'), size:num('p_size'),
            leading:num('p_lead'), track:num('p_track'), margin:num('p_marg'),
            align:$('p_align').value, fit:$('p_fit').checked,
@@ -1482,7 +1511,7 @@ function keyParams(){
 function setParams(tab, o){
   switchTab(tab);
   var maps = {
-    plate:{len:'p_len',wid:'p_wid',thk:'p_thk',radius:'p_rad',text:'p_text',emb:'p_emb',size:'p_size',
+    plate:{style:'p_style',bridge:'p_bridge',len:'p_len',wid:'p_wid',thk:'p_thk',radius:'p_rad',text:'p_text',emb:'p_emb',size:'p_size',
            leading:'p_lead',track:'p_track',margin:'p_marg',align:'p_align',c1:'p_c1t',c2:'p_c2t',fname:'fname'},
     bin:  {len:'b_len',wid:'b_wid',hgt:'b_hgt',wall:'b_wall',bot:'b_bot',radius:'b_rad',
            cols:'b_cols',rows:'b_rows',c1:'b_c1t',c2:'b_c2t',fname:'fname'},
@@ -1545,7 +1574,14 @@ function scheduleRebuild(){
   if(rebuildTimer) clearTimeout(rebuildTimer);
   rebuildTimer=setTimeout(rebuild, 90);
 }
+function syncPlateStyle(){
+  var st=$('p_style').value==='stencil';
+  $('p_bridge_row').style.display = st?'':'none';
+  $('p_style_hint').style.display = st?'':'none';
+  $('p_emb').closest('.row').style.display = st?'none':'';
+}
 function rebuild(){
+  if($('p_style')) syncPlateStyle();
   var t0=performance.now();
   var tab=UI.tab, P = tab==='plate'? plateParams() : (tab==='bin'? binParams() : keyParams());
   var vd = validate(P, tab);
@@ -1590,6 +1626,8 @@ function rebuild(){
   html += ' <b>'+sz[0].toFixed(2)+' × '+sz[1].toFixed(2)+' × '+sz[2].toFixed(2)+'</b> mm<br>';
   html += '三角面 <b>'+totT.toLocaleString()+'</b> · 顶点 <b>'+totV.toLocaleString()+'</b> · 部件 <b>'+
           model.parts.filter(function(p){return p.mesh.nt()>0;}).length+'</b> · '+ms.toFixed(0)+'ms<br>';
+  if(tab==='plate' && model.info.bridges!==undefined)
+    html += '单色镂空 · 自动连接桥 '+model.info.bridges+' 道<br>';
   if(tab==='plate' && model.info.glyphGroups!==undefined)
     html += '字形块 '+model.info.glyphGroups+' · 文字 '+model.info.textW.toFixed(1)+'×'+model.info.textH.toFixed(1)+'mm'+
             (model.info.scale<0.999? ' · 缩放 '+(model.info.scale*100).toFixed(0)+'%':'')+'<br>';
@@ -1781,7 +1819,7 @@ function boot(){
   initView();
   initFonts();
 
-  var ids=['p_len','p_wid','p_thk','p_rad','p_text','p_emb','p_size','p_lead','p_track','p_marg','p_align','p_fit',
+  var ids=['p_style','p_bridge','p_len','p_wid','p_thk','p_rad','p_text','p_emb','p_size','p_lead','p_track','p_marg','p_align','p_fit',
            'b_len','b_wid','b_hgt','b_wall','b_bot','b_rad','b_cols','b_rows',
            'k_text','k_size','k_track','k_slant','k_bar',
            'k_ringD','k_ringHole','k_ringInset','k_side'];
