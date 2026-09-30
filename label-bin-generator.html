@@ -9315,7 +9315,7 @@ function doExport(){
         return dl.save({filename: exportName()+'.3mf.zip', data: r.out});
       }).then(function(){
         $('busy').classList.remove('on');
-        alert('已保存 '+exportName()+'.3mf.zip\n把文件名末尾的 .zip 删掉，就是可双击切片的 .3mf。');
+        alert('已保存 '+exportName()+'.3mf.zip\n\n⚠ 不要双击这个 .zip —— Mac 会把它解压成文件夹。\n先右键 → 重新命名，删掉末尾的 .zip（提示时选「使用 .3mf」），再双击打开切片。\n\n如果 Safari 下载后自动解压了：Safari 设置 → 通用 → 取消勾选「下载后打开"安全的"文件」。\n不想改名的话，用本地版 label-bin-generator.html 导出，直接就是 .3mf。');
       }, function(e){
         $('busy').classList.remove('on');
         if(e && e.code==='declined') return;
