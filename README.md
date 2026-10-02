@@ -1,5 +1,7 @@
 # 名牌 & 收纳盒 参数化生成器
 
+**在线直接用 → https://jyb635050-ai.github.io/bambu-label-bin-generator/**（导出就是 .3mf，Bambu Studio 双击即切）
+
 双击 `label-bin-generator.html` → 浏览器打开 → 改参数 → 实时 3D 预览 → **导出 3MF** →
 Bambu Studio 双击那个 3MF 即可切片。**全程离线, 不联网, 不装任何东西。**
 
