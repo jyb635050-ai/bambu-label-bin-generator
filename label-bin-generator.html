@@ -160,8 +160,9 @@ Appearance inspection</textarea>
             <button class="mini" id="b_unround">所选恢复方格</button>
           </div>
           <div class="row"><label>圆孔直径</label><input type="number" id="b_ballD" value="12.7" min="1" max="200" step="0.1"><span class="u">mm</span></div>
+          <div class="row"><label>孔底形状</label><select id="b_ballSeat"><option value="sphere">球面（贴合钢球）</option><option value="flat">平底</option></select></div>
           <div class="row"><label>配合间隙</label><input type="number" id="b_ballClr" value="0.4" min="0" max="3" step="0.05"><span class="u">mm</span></div>
-          <p class="hint">放钢球/轴承等圆形件：选中格子 → <b>所选设为圆孔</b>，该格变成一个居中的圆形窝。实际孔径 = 直径 + 间隙（FDM 打出来的孔会偏小，0.3–0.5 比较稳）。孔深 = 高 − 底厚。</p>
+          <p class="hint">放钢球/轴承等圆形件：选中格子 → <b>所选设为圆孔</b>，该格变成一个居中的圆形窝。实际孔径 = 直径 + 间隙（FDM 打出来的孔会偏小，0.3–0.5 比较稳）。孔深 = 高 − 底厚。球面底 = 孔底是与钢球同半径的半球凹坑，球坐进去贴合不晃，最低点下仍留底厚。</p>
         </fieldset>
 
         <fieldset><legend>颜色</legend>
@@ -8753,6 +8754,8 @@ function buildBin(P){
     var dd=P.ballD+P.ballClr;
     if(dd > Math.min(w,h)-0.8) err.push('圆孔 ⌀'+dd.toFixed(1)+'mm 放不进 '+w.toFixed(1)+'×'+h.toFixed(1)+'mm 的格子（四周至少留 0.4mm）。');
   });
+  if((P.rounds||[]).length && P.ballSeat==='sphere' && (H-bt) < (P.ballD+P.ballClr)/2+0.05)
+    err.push('球面底需要孔深 ≥ 球半径：现在孔深 '+(H-bt).toFixed(1)+'mm < '+((P.ballD+P.ballClr)/2).toFixed(2)+'mm，请加大高度或减小底厚。');
   var m=new Mesh();
   if(err.length)
     return {parts:[{name:'bin',mesh:m,slot:1,color:P.c1}], warnings:warn, errors:err, info:{}, size:[L,W,H]};
@@ -8804,9 +8807,27 @@ function buildBin(P){
       for(var a3=0;a3<circ.length;a3++) cTop.push(pH(circ[a3][0],circ[a3][1]));
       ribbon(m, rectCCW, rIds, circ, cTop, ccx, ccy);          // 顶面环带
       var circCW=circ.slice().reverse(), cTopCW=cTop.slice().reverse(), cBot=[];
-      for(var a4=0;a4<circCW.length;a4++) cBot.push(pB(circCW[a4][0],circCW[a4][1]));
-      addWallIds(m, cBot, cTopCW);                              // 圆孔壁
-      fanFace(m, circCW, cBot, bt, true);                       // 圆孔底
+      if(P.ballSeat==='sphere'){
+        // 球面底: 直壁圆筒到球心高度 zc, 往下接与钢球同半径的半球凹坑, 最低点落在 z=bt
+        var zc=bt+holeR, KL=Math.max(8, Math.ceil(holeR*1.6)), prev=[];
+        for(var a5=0;a5<circCW.length;a5++) prev.push(m.addV(circCW[a5][0],circCW[a5][1],zc));
+        addWallIds(m, prev, cTopCW);                            // 直壁 zc -> H
+        for(var kk=1;kk<KL;kk++){
+          var th=(Math.PI/2)*kk/KL, rr=holeR*Math.cos(th), zz=zc-holeR*Math.sin(th), ring=[];
+          for(var a6=0;a6<circCW.length;a6++){
+            var dx=circCW[a6][0]-ccx, dy=circCW[a6][1]-ccy, f=rr/holeR;
+            ring.push(m.addV(ccx+dx*f, ccy+dy*f, zz));
+          }
+          addWallIds(m, ring, prev);                            // 球带
+          prev=ring;
+        }
+        var pole=m.addV(ccx,ccy,bt);                            // 球底最低点
+        for(var a7=0;a7<prev.length;a7++){ var j7=(a7+1)%prev.length; m.addT(pole, prev[j7], prev[a7]); }
+      } else {
+        for(var a4=0;a4<circCW.length;a4++) cBot.push(pB(circCW[a4][0],circCW[a4][1]));
+        addWallIds(m, cBot, cTopCW);                            // 圆孔壁
+        fanFace(m, circCW, cBot, bt, true);                     // 平底
+      }
       nRound++;
       continue;
     }
@@ -9156,7 +9177,7 @@ function binParams(){
            bot:num('b_bot'), radius:num('b_rad'),
            cols:Math.max(1,Math.round(num('b_cols'))), rows:Math.max(1,Math.round(num('b_rows'))),
            merges:UI.merges.slice(), rounds:(UI.rounds||[]).slice(),
-           ballD:num('b_ballD'), ballClr:num('b_ballClr'),
+           ballD:num('b_ballD'), ballClr:num('b_ballClr'), ballSeat:$('b_ballSeat').value,
            c1:$('b_c1t').value, c2:$('b_c2t').value };
 }
 /* 叠色层预设: [外扩mm, 厚度mm, 颜色] 从下往上 */
@@ -9209,7 +9230,7 @@ function setParams(tab, o){
     plate:{style:'p_style',bridge:'p_bridge',len:'p_len',wid:'p_wid',thk:'p_thk',radius:'p_rad',text:'p_text',emb:'p_emb',size:'p_size',
            leading:'p_lead',track:'p_track',margin:'p_marg',align:'p_align',c1:'p_c1t',c2:'p_c2t',fname:'fname'},
     bin:  {len:'b_len',wid:'b_wid',hgt:'b_hgt',wall:'b_wall',bot:'b_bot',radius:'b_rad',
-           cols:'b_cols',rows:'b_rows',ballD:'b_ballD',ballClr:'b_ballClr',c1:'b_c1t',c2:'b_c2t',fname:'fname'},
+           cols:'b_cols',rows:'b_rows',ballD:'b_ballD',ballClr:'b_ballClr',ballSeat:'b_ballSeat',c1:'b_c1t',c2:'b_c2t',fname:'fname'},
     key:  {text:'k_text',size:'k_size',track:'k_track',slant:'k_slant',
            ringD:'k_ringD',ringHole:'k_ringHole',ringInset:'k_ringInset',side:'k_side',fname:'fname'}
   };
@@ -9332,7 +9353,7 @@ function rebuild(){
             (model.info.pieces===1? '<b>1 (一体)</b>' : '<b style="color:#ffb648">'+model.info.pieces+'</b>')+'<br>';
   if(tab==='bin' && model.info.cells!==undefined)
     html += '格数 '+model.info.cells+' · 基本格净 '+model.info.cw.toFixed(1)+'×'+model.info.ch.toFixed(1)+'mm'+
-      (model.info.rounds? ' · 圆孔 '+model.info.rounds+' 个 ⌀'+model.info.holeD.toFixed(2)+' 深'+model.info.depth.toFixed(1):'')+'<br>';
+      (model.info.rounds? ' · 圆孔 '+model.info.rounds+' 个 ⌀'+model.info.holeD.toFixed(2)+' 深'+model.info.depth.toFixed(1)+(binParams().ballSeat==='sphere'?' 球底':' 平底'):'')+'<br>';
   if(tab==='key') html += model.parts.map(function(q){return '槽'+q.slot+' '+normHex(q.color);}).join(' · ')+' · 全 PLA';
   else html += '槽1 '+normHex(P.c1)+' · 槽2 '+normHex(P.c2)+' · PLA/PLA';
   $('stat').innerHTML=html;
@@ -9603,6 +9624,7 @@ function boot(){
   $('b_clear').addEventListener('click', function(){ UI.merges=[]; UI.rounds=[]; UI.sel=null; drawGrid(); rebuild(); });
   $('b_round').addEventListener('click', function(){ setRound(true); });
   $('b_unround').addEventListener('click', function(){ setRound(false); });
+  $('b_ballSeat').addEventListener('change', scheduleRebuild);
   ['b_ballD','b_ballClr'].forEach(function(id){
     $(id).addEventListener('input', function(){ drawGrid(); scheduleRebuild(); });
   });
