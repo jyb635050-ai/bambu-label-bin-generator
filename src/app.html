@@ -56,6 +56,11 @@ button.pri{background:linear-gradient(180deg,var(--acc),var(--acc2));border-colo
 #grid{margin-top:9px;-webkit-user-select:none;user-select:none}
 #gridWrap{background:#11141a;border:1px solid var(--line2);border-radius:7px;padding:9px;display:flex;justify-content:center}
 .gcell{position:absolute;border:1px solid #454e63;border-radius:3px;background:#252b38;display:flex;align-items:center;justify-content:center;font-size:10px;color:#7d8798;cursor:pointer;transition:background .08s,border-color .08s}
+.gcell{flex-direction:column;gap:1px;line-height:1.15;text-align:center;overflow:hidden}
+.gdim{font:600 10.5px ui-monospace,Menlo,monospace;color:#c3ccda;white-space:nowrap}
+.gdim i{font-style:normal;color:#6b7688;margin:0 1px}
+.gspan{font-size:9px;color:#7d8798}
+.gcell.sel .gdim{color:#fff}
 .gcell:hover{border-color:#5f6a80}
 .gcell.sel{background:rgba(90,169,255,.3);border-color:var(--acc);color:#dceaff}
 .gcell.mg{background:#2e3a4d;border-color:#5c6880;color:#aab6c8;font-weight:600}
@@ -141,7 +146,7 @@ Appearance inspection</textarea>
         <fieldset><legend>分格</legend>
           <div class="row"><label>列数 X</label><input type="number" id="b_cols" value="3" min="1" max="20" step="1"></div>
           <div class="row"><label>行数 Y</label><input type="number" id="b_rows" value="2" min="1" max="20" step="1"></div>
-          <p class="hint">下图点选或拖框选相邻若干格 → <b>合并</b>，中间隔断消失，大小格混排。双击合并格可拆开。</p>
+          <p class="hint">格子里的数字是该格<b>内腔净尺寸</b>（长×宽 mm，扣掉壁厚），改参数实时更新。下图点选或拖框选相邻若干格 → <b>合并</b>，中间隔断消失，大小格混排。双击合并格可拆开。</p>
           <div id="gridWrap"><div id="gridBox"></div></div>
           <div class="btns">
             <button class="mini" id="b_merge">合并所选</button>
@@ -1727,6 +1732,8 @@ function drawGrid(){
   box.style.width=bw+'px'; box.style.height=bh+'px';
   box.innerHTML='';
   var cw=bw/cols, chh=bh/rows;
+  // 每格实际内腔尺寸 (mm): 与 binCells 同一公式, 合并格 = n 格 + (n-1) 道隔断
+  var wl=num('b_wall'), mcw=(L-2*wl-(cols-1)*wl)/cols, mch=(W-2*wl-(rows-1)*wl)/rows;
   var covered={};
   var blocks=[];
   for(var i=0;i<UI.merges.length;i++){
@@ -1748,7 +1755,11 @@ function drawGrid(){
     d.style.width=((q.c1-q.c0+1)*cw-4)+'px';
     d.style.height=((q.r1-q.r0+1)*chh-4)+'px';
     var nc=q.c1-q.c0+1, nr=q.r1-q.r0+1;
-    d.textContent = (nc>1||nr>1) ? (nc+'×'+nr) : '';
+    var iw=nc*mcw+(nc-1)*wl, ih=nr*mch+(nr-1)*wl;
+    d.innerHTML = (mcw>0&&mch>0)
+      ? '<span class="gdim">'+(+iw.toFixed(1))+'<i>×</i>'+(+ih.toFixed(1))+'</span>'+((nc>1||nr>1)?'<span class="gspan">'+nc+'×'+nr+' 合并</span>':'')
+      : '';
+    d.title='内腔 '+iw.toFixed(1)+' × '+ih.toFixed(1)+' mm';
     d.dataset.r=q.r0; d.dataset.c=q.c0; d.dataset.r1=q.r1; d.dataset.c1=q.c1;
     box.appendChild(d);
   }
@@ -1829,7 +1840,7 @@ function boot(){
     el.addEventListener('input', scheduleRebuild);
     el.addEventListener('change', scheduleRebuild);
   }
-  ['b_cols','b_rows','b_len','b_wid'].forEach(function(id){
+  ['b_cols','b_rows','b_len','b_wid','b_wall'].forEach(function(id){
     $(id).addEventListener('input', drawGrid);
     $(id).addEventListener('change', drawGrid);
   });
