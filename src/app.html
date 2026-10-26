@@ -215,6 +215,10 @@ Appearance inspection</textarea>
     <div id="foot">
       <div id="stat">初始化…</div>
       <button class="pri" id="export" style="width:100%">导出 3MF</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:7px">
+        <span class="hint" style="margin:0">参数自动保存在本浏览器，刷新不丢</span>
+        <button class="mini" id="resetAll" title="清空保存的参数，回到默认">恢复默认</button>
+      </div>
     </div>
   </div>
 
@@ -1956,8 +1960,47 @@ function boot(){
   bindGrid();
   $('export').addEventListener('click', doExport);
 
+  $('resetAll').addEventListener('click', function(){ if(confirm('清空所有已保存的参数，回到默认？')) resetState(); });
+  loadState();
   drawGrid();
   rebuild();
+  // 之后任何改动都自动存
+  document.getElementById('panel').addEventListener('input', saveStateSoon);
+  document.getElementById('panel').addEventListener('change', saveStateSoon);
+  document.getElementById('panel').addEventListener('click', saveStateSoon);
+}
+
+/* ===== 自动保存: 所有输入框 + 当前页签 + 合并格 + 圆孔 + 字体, 存在本浏览器 =====
+   只存本机, 不上传; 拿不到存储(隐私模式等)时静默跳过, 页面照常用默认值。 */
+var STATE_KEY='3dgen-state-v1', saveTimer=null;
+function saveStateSoon(){ if(saveTimer) clearTimeout(saveTimer); saveTimer=setTimeout(saveState,300); }
+function saveState(){
+  try{
+    var v={};
+    document.querySelectorAll('#panel input, #panel select, #panel textarea').forEach(function(el){
+      if(!el.id || el.type==='file') return;
+      v[el.id] = el.type==='checkbox' ? el.checked : el.value;
+    });
+    var fk=null; for(var k in UI.fonts) if(UI.fonts[k]===UI.fontSel && k[0]==='b') fk=k;
+    localStorage.setItem(STATE_KEY, JSON.stringify({v:v, tab:UI.tab, merges:UI.merges, rounds:UI.rounds||[], font:fk}));
+  }catch(e){}
+}
+function loadState(){
+  var st=null;
+  try{ st=JSON.parse(localStorage.getItem(STATE_KEY)||'null'); }catch(e){}
+  if(!st || !st.v) return;
+  Object.keys(st.v).forEach(function(id){
+    var el=document.getElementById(id); if(!el || id==='p_font' || id==='k_font') return;
+    if(el.type==='checkbox') el.checked=!!st.v[id]; else el.value=st.v[id];
+  });
+  UI.merges=st.merges||[]; UI.rounds=st.rounds||[];
+  if(st.font) pickFont(st.font);
+  if(typeof syncLayerRows==='function') syncLayerRows();
+  if(st.tab) switchTab(st.tab);
+}
+function resetState(){
+  try{ localStorage.removeItem(STATE_KEY); }catch(e){}
+  location.reload();
 }
 
 /* 自动化钩子: 走的是和界面按钮完全相同的那条链路 */
