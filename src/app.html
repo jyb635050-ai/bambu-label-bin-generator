@@ -60,6 +60,8 @@ button.pri{background:linear-gradient(180deg,var(--acc),var(--acc2));border-colo
 .gdim{font:600 10.5px ui-monospace,Menlo,monospace;color:#c3ccda;white-space:nowrap}
 .gdim i{font-style:normal;color:#6b7688;margin:0 1px}
 .gspan{font-size:9px;color:#7d8798}
+.gcell.rd{background:#2a3546;border-color:#5aa9ff}
+.gcell.rd .gdim{color:#9fd0ff}
 .gcell.sel .gdim{color:#fff}
 .gcell:hover{border-color:#5f6a80}
 .gcell.sel{background:rgba(90,169,255,.3);border-color:var(--acc);color:#dceaff}
@@ -153,6 +155,13 @@ Appearance inspection</textarea>
             <button class="mini" id="b_split">拆开所选</button>
             <button class="mini" id="b_clear">全部还原</button>
           </div>
+          <div class="btns">
+            <button class="mini" id="b_round">所选设为圆孔</button>
+            <button class="mini" id="b_unround">所选恢复方格</button>
+          </div>
+          <div class="row"><label>圆孔直径</label><input type="number" id="b_ballD" value="12.7" min="1" max="200" step="0.1"><span class="u">mm</span></div>
+          <div class="row"><label>配合间隙</label><input type="number" id="b_ballClr" value="0.4" min="0" max="3" step="0.05"><span class="u">mm</span></div>
+          <p class="hint">放钢球/轴承等圆形件：选中格子 → <b>所选设为圆孔</b>，该格变成一个居中的圆形窝。实际孔径 = 直径 + 间隙（FDM 打出来的孔会偏小，0.3–0.5 比较稳）。孔深 = 高 − 底厚。</p>
         </fieldset>
 
         <fieldset><legend>颜色</legend>
@@ -1086,6 +1095,11 @@ function buildBin(P){
   var cc=binCells(P);
   if(cc.cw<=0.05 || cc.ch<=0.05)
     err.push('分格太密: 单格净尺寸 '+cc.cw.toFixed(2)+'×'+cc.ch.toFixed(2)+'mm ≤ 0，请减少行列数或壁厚。');
+  (P.rounds||[]).forEach(function(q){
+    var w=(q.c1-q.c0+1)*cc.cw+(q.c1-q.c0)*wall, h=(q.r1-q.r0+1)*cc.ch+(q.r1-q.r0)*wall;
+    var dd=P.ballD+P.ballClr;
+    if(dd > Math.min(w,h)-0.8) err.push('圆孔 ⌀'+dd.toFixed(1)+'mm 放不进 '+w.toFixed(1)+'×'+h.toFixed(1)+'mm 的格子（四周至少留 0.4mm）。');
+  });
   var m=new Mesh();
   if(err.length)
     return {parts:[{name:'bin',mesh:m,slot:1,color:P.c1}], warnings:warn, errors:err, info:{}, size:[L,W,H]};
@@ -1122,8 +1136,27 @@ function buildBin(P){
     var a=pH(Xs[xi],Ys[yi]), b=pH(Xs[xi+1],Ys[yi]), c=pH(Xs[xi+1],Ys[yi+1]), d=pH(Xs[xi],Ys[yi+1]);
     m.addT(a,b,c); m.addT(a,c,d);              // CCW => +Z
   }
-  /* ④⑤ 每个格腔: 内壁 bt -> H, 腔底 z=bt 法线 +Z */
+  /* ④⑤ 每个格腔: 内壁 bt -> H, 腔底 z=bt 法线 +Z
+     圆孔格: 格子矩形环(顶面)与圆孔之间用环带封顶, 圆孔壁 bt -> H, 圆孔底 z=bt */
+  var roundKey={};
+  (P.rounds||[]).forEach(function(q){ roundKey[q.r0+','+q.c0+','+q.r1+','+q.c1]=1; });
+  var holeR=(P.ballD+P.ballClr)/2, nRound=0;
   for(var ci=0; ci<rects.length; ci++){
+    var qc=rects[ci].cell;
+    if(roundKey[qc.r0+','+qc.c0+','+qc.r1+','+qc.c1]){
+      var rc=rects[ci], ccx=(rc.x0+rc.x1)/2, ccy=(rc.y0+rc.y1)/2;
+      var rectCCW=cavRing(rc, Xs, Ys).slice().reverse(), rIds=[];
+      for(var a2=0;a2<rectCCW.length;a2++) rIds.push(pH(rectCCW[a2][0],rectCCW[a2][1]));
+      var circ=circlePoly(ccx,ccy,holeR,Math.max(48,Math.ceil(holeR*8))), cTop=[];
+      for(var a3=0;a3<circ.length;a3++) cTop.push(pH(circ[a3][0],circ[a3][1]));
+      ribbon(m, rectCCW, rIds, circ, cTop, ccx, ccy);          // 顶面环带
+      var circCW=circ.slice().reverse(), cTopCW=cTop.slice().reverse(), cBot=[];
+      for(var a4=0;a4<circCW.length;a4++) cBot.push(pB(circCW[a4][0],circCW[a4][1]));
+      addWallIds(m, cBot, cTopCW);                              // 圆孔壁
+      fanFace(m, circCW, cBot, bt, true);                       // 圆孔底
+      nRound++;
+      continue;
+    }
     var ring=cavRing(rects[ci], Xs, Ys), cb=[], ct=[];
     for(var t=0;t<ring.length;t++){
       cb.push(pB(ring[t][0],ring[t][1]));
@@ -1133,8 +1166,9 @@ function buildBin(P){
     fanFace(m, ring, cb, bt, true);
   }
   if(wall<0.8) warn.push('壁厚 '+wall+'mm 不足 2 圈 0.4 喷嘴壁宽，打印可能偏脆。');
+  if(nRound && (H-bt) < P.ballD/2) warn.push('圆孔深 '+(H-bt).toFixed(1)+'mm 不到球径一半，钢球容易滚出来。');
   return {parts:[{name:'bin', mesh:m, slot:1, color:P.c1}], warnings:warn, errors:err,
-          info:{cells:rects.length, cw:cc.cw, ch:cc.ch}, size:[L,W,H]};
+          info:{cells:rects.length, cw:cc.cw, ch:cc.ch, rounds:nRound, holeD:holeR*2, depth:H-bt}, size:[L,W,H]};
 }
 </script>
 <script>
@@ -1414,7 +1448,7 @@ function showModel(model){
 <script>
 "use strict";
 /* ================================================== UI 状态与装配 */
-var UI = { tab:'plate', fonts:{}, fontSel:null, merges:[], sel:null, model:null, last:null };
+var UI = { tab:'plate', fonts:{}, fontSel:null, merges:[], rounds:[], sel:null, model:null, last:null };
 function $(id){ return document.getElementById(id); }
 function num(id){ var v=parseFloat($(id).value); return isFinite(v)?v:0; }
 
@@ -1468,7 +1502,9 @@ function binParams(){
   return { len:num('b_len'), wid:num('b_wid'), hgt:num('b_hgt'), wall:num('b_wall'),
            bot:num('b_bot'), radius:num('b_rad'),
            cols:Math.max(1,Math.round(num('b_cols'))), rows:Math.max(1,Math.round(num('b_rows'))),
-           merges:UI.merges.slice(), c1:$('b_c1t').value, c2:$('b_c2t').value };
+           merges:UI.merges.slice(), rounds:(UI.rounds||[]).slice(),
+           ballD:num('b_ballD'), ballClr:num('b_ballClr'),
+           c1:$('b_c1t').value, c2:$('b_c2t').value };
 }
 /* 叠色层预设: [外扩mm, 厚度mm, 颜色] 从下往上 */
 var LAYER_PRESETS={
@@ -1520,13 +1556,14 @@ function setParams(tab, o){
     plate:{style:'p_style',bridge:'p_bridge',len:'p_len',wid:'p_wid',thk:'p_thk',radius:'p_rad',text:'p_text',emb:'p_emb',size:'p_size',
            leading:'p_lead',track:'p_track',margin:'p_marg',align:'p_align',c1:'p_c1t',c2:'p_c2t',fname:'fname'},
     bin:  {len:'b_len',wid:'b_wid',hgt:'b_hgt',wall:'b_wall',bot:'b_bot',radius:'b_rad',
-           cols:'b_cols',rows:'b_rows',c1:'b_c1t',c2:'b_c2t',fname:'fname'},
+           cols:'b_cols',rows:'b_rows',ballD:'b_ballD',ballClr:'b_ballClr',c1:'b_c1t',c2:'b_c2t',fname:'fname'},
     key:  {text:'k_text',size:'k_size',track:'k_track',slant:'k_slant',
            ringD:'k_ringD',ringHole:'k_ringHole',ringInset:'k_ringInset',side:'k_side',fname:'fname'}
   };
   var map = maps[tab];
   for(var k in o){
     if(k==='merges'){ UI.merges=o[k].slice(); continue; }
+    if(k==='rounds'){ UI.rounds=o[k].slice(); continue; }
     if(k==='preset'){ applyPreset(o[k]); continue; }
     if(k==='layers'){ for(var li=0;li<MAXL;li++){ var L=o[k][li];
         $('kl_on'+li).checked=!!L; if(L){ $('kl_o'+li).value=L[0]; $('kl_h'+li).value=L[1];
@@ -1641,7 +1678,8 @@ function rebuild(){
     html += model.info.layers+' 层叠色 · 外形 '+model.info.w.toFixed(1)+'×'+model.info.h.toFixed(1)+'mm · 连通块 '+
             (model.info.pieces===1? '<b>1 (一体)</b>' : '<b style="color:#ffb648">'+model.info.pieces+'</b>')+'<br>';
   if(tab==='bin' && model.info.cells!==undefined)
-    html += '格数 '+model.info.cells+' · 基本格净 '+model.info.cw.toFixed(1)+'×'+model.info.ch.toFixed(1)+'mm<br>';
+    html += '格数 '+model.info.cells+' · 基本格净 '+model.info.cw.toFixed(1)+'×'+model.info.ch.toFixed(1)+'mm'+
+      (model.info.rounds? ' · 圆孔 '+model.info.rounds+' 个 ⌀'+model.info.holeD.toFixed(2)+' 深'+model.info.depth.toFixed(1):'')+'<br>';
   if(tab==='key') html += model.parts.map(function(q){return '槽'+q.slot+' '+normHex(q.color);}).join(' · ')+' · 全 PLA';
   else html += '槽1 '+normHex(P.c1)+' · 槽2 '+normHex(P.c2)+' · PLA/PLA';
   $('stat').innerHTML=html;
@@ -1716,13 +1754,30 @@ function expandOverMerges(sel){
   }
   return s;
 }
+function liveBlocks(){
+  var rows=Math.max(1,Math.round(num('b_rows'))), cols=Math.max(1,Math.round(num('b_cols'))), cov={}, out=[];
+  UI.merges.forEach(function(m){ out.push(m); for(var r=m.r0;r<=m.r1;r++) for(var c=m.c0;c<=m.c1;c++) cov[r+','+c]=1; });
+  for(var r=0;r<rows;r++) for(var c=0;c<cols;c++) if(!cov[r+','+c]) out.push({r0:r,c0:c,r1:r,c1:c});
+  return out;
+}
+function pruneRounds(){
+  var bl=liveBlocks();
+  UI.rounds=(UI.rounds||[]).filter(function(z){ return bl.some(function(b){return b.r0===z.r0&&b.c0===z.c0&&b.r1===z.r1&&b.c1===z.c1;}); });
+}
+function setRound(on){
+  if(!UI.sel) return;
+  var hit=liveBlocks().filter(function(b){ return rectHit(b,UI.sel); });
+  UI.rounds=(UI.rounds||[]).filter(function(z){ return !hit.some(function(b){return b.r0===z.r0&&b.c0===z.c0&&b.r1===z.r1&&b.c1===z.c1;}); });
+  if(on) hit.forEach(function(b){ UI.rounds.push({r0:b.r0,c0:b.c0,r1:b.r1,c1:b.c1}); });
+  drawGrid(); rebuild();
+}
 function clampMerges(){
   var rows=Math.max(1,Math.round(num('b_rows'))), cols=Math.max(1,Math.round(num('b_cols')));
   UI.merges = UI.merges.filter(function(m){ return m.r1<rows && m.c1<cols; });
   if(UI.sel && (UI.sel.r1>=rows || UI.sel.c1>=cols)) UI.sel=null;
 }
 function drawGrid(){
-  clampMerges();
+  clampMerges(); pruneRounds();
   var rows=Math.max(1,Math.round(num('b_rows'))), cols=Math.max(1,Math.round(num('b_cols')));
   var box=$('gridBox');
   var maxW=300, maxH=210;
@@ -1756,6 +1811,14 @@ function drawGrid(){
     d.style.height=((q.r1-q.r0+1)*chh-4)+'px';
     var nc=q.c1-q.c0+1, nr=q.r1-q.r0+1;
     var iw=nc*mcw+(nc-1)*wl, ih=nr*mch+(nr-1)*wl;
+    var isRound=(UI.rounds||[]).some(function(z){return z.r0===q.r0&&z.c0===q.c0&&z.r1===q.r1&&z.c1===q.c1;});
+    if(isRound){
+      var hd=num('b_ballD')+num('b_ballClr');
+      d.className+=' rd';
+      d.innerHTML='<span class="gdim">⌀'+(+hd.toFixed(2))+'</span>';
+      d.title='圆孔 ⌀'+hd.toFixed(2)+' mm（格子 '+iw.toFixed(1)+'×'+ih.toFixed(1)+'）';
+      box.appendChild(d); continue;
+    }
     d.innerHTML = (mcw>0&&mch>0)
       ? '<span class="gdim">'+(+iw.toFixed(1))+'<i>×</i>'+(+ih.toFixed(1))+'</span>'+((nc>1||nr>1)?'<span class="gspan">'+nc+'×'+nr+' 合并</span>':'')
       : '';
@@ -1884,7 +1947,12 @@ function boot(){
 
   $('b_merge').addEventListener('click', doMerge);
   $('b_split').addEventListener('click', doSplit);
-  $('b_clear').addEventListener('click', function(){ UI.merges=[]; UI.sel=null; drawGrid(); rebuild(); });
+  $('b_clear').addEventListener('click', function(){ UI.merges=[]; UI.rounds=[]; UI.sel=null; drawGrid(); rebuild(); });
+  $('b_round').addEventListener('click', function(){ setRound(true); });
+  $('b_unround').addEventListener('click', function(){ setRound(false); });
+  ['b_ballD','b_ballClr'].forEach(function(id){
+    $(id).addEventListener('input', function(){ drawGrid(); scheduleRebuild(); });
+  });
   bindGrid();
   $('export').addEventListener('click', doExport);
 
