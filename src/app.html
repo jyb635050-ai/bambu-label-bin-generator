@@ -155,14 +155,19 @@ Appearance inspection</textarea>
             <button class="mini" id="b_split">拆开所选</button>
             <button class="mini" id="b_clear">全部还原</button>
           </div>
+          <div class="btns" style="align-items:center">
+            <button class="mini" id="b_even">所选合并后左右均分</button>
+            <span class="hint" style="margin:0">成</span><input type="number" id="b_splitN" value="2" min="2" max="10" step="1" style="width:52px"><span class="hint" style="margin:0">格（宽度完全相等）</span>
+          </div>
           <div class="btns">
             <button class="mini" id="b_round">所选设为圆孔</button>
             <button class="mini" id="b_unround">所选恢复方格</button>
           </div>
-          <div class="row"><label>圆孔直径</label><input type="number" id="b_ballD" value="12.7" min="1" max="200" step="0.1"><span class="u">mm</span></div>
+          <div class="row"><label>圆孔直径</label><input type="number" id="b_ballD" value="14" min="1" max="200" step="0.1"><span class="u">mm</span></div>
           <div class="row"><label>孔底形状</label><select id="b_ballSeat"><option value="sphere">球面（贴合钢球）</option><option value="flat">平底</option></select></div>
-          <div class="row"><label>配合间隙</label><input type="number" id="b_ballClr" value="0.4" min="0" max="3" step="0.05"><span class="u">mm</span></div>
-          <p class="hint">放钢球/轴承等圆形件：选中格子 → <b>所选设为圆孔</b>，该格变成一个居中的圆形窝。实际孔径 = 直径 + 间隙（FDM 打出来的孔会偏小，0.3–0.5 比较稳）。孔深 = 高 − 底厚。球面底 = 孔底是与钢球同半径的半球凹坑，球坐进去贴合不晃，最低点下仍留底厚。</p>
+          <div class="row"><label>孔深</label><input type="number" id="b_ballDepth" value="5" min="0" max="200" step="0.1"><span class="u">mm</span></div>
+          <div class="row"><label>配合间隙</label><input type="number" id="b_ballClr" value="0" min="0" max="3" step="0.05"><span class="u">mm</span></div>
+          <p class="hint">放钢球/轴承等圆形件：选中格子 → <b>所选设为圆孔</b>，该格变成一个居中的圆形窝。实际孔径 = 直径 + 间隙（FDM 打出来的孔会偏小，0.3–0.5 比较稳）。孔深 = 顶面到孔最低点的距离（填 0 = 一直挖到底厚）。球面底 = 孔底是这个直径的球面；孔深小于半径时就是一个浅碗（球冠），口径会比直径小一点。</p>
         </fieldset>
 
         <fieldset><legend>颜色</legend>
@@ -1058,15 +1063,22 @@ function binCells(P){
   for(var i=0;i<P.merges.length;i++){
     var m=P.merges[i];
     for(var r=m.r0;r<=m.r1;r++) for(var c=m.c0;c<=m.c1;c++) covered[r+','+c]=1;
-    out.push({r0:m.r0,c0:m.c0,r1:m.r1,c1:m.c1});
+    out.push({r0:m.r0,c0:m.c0,r1:m.r1,c1:m.c1,split:m.split||1});
   }
   for(var r2=0;r2<P.rows;r2++) for(var c2=0;c2<P.cols;c2++)
     if(!covered[r2+','+c2]) out.push({r0:r2,c0:c2,r1:r2,c1:c2});
   var rects=[];
   for(var k=0;k<out.length;k++){
     var q=out[k];
-    rects.push({ x0:sn(wall+q.c0*(cw+wall)), x1:sn(wall+q.c1*(cw+wall)+cw),
-                 y0:sn(wall+q.r0*(ch+wall)), y1:sn(wall+q.r1*(ch+wall)+ch), cell:q });
+    var X0=wall+q.c0*(cw+wall), X1=wall+q.c1*(cw+wall)+cw;
+    var Y0=sn(wall+q.r0*(ch+wall)), Y1=sn(wall+q.r1*(ch+wall)+ch);
+    var n=Math.max(1, q.split||1);
+    if(n===1){ rects.push({x0:sn(X0), x1:sn(X1), y0:Y0, y1:Y1, cell:q}); continue; }
+    var sw=(X1-X0-(n-1)*wall)/n;                  // 均分: n 个等宽子腔 + (n-1) 道隔断
+    for(var pi=0;pi<n;pi++){
+      var sx=X0+pi*(sw+wall);
+      rects.push({x0:sn(sx), x1:sn(sx+sw), y0:Y0, y1:Y1, cell:q, part:pi, partW:sw});
+    }
   }
   return {rects:rects, cw:cw, ch:ch};
 }
@@ -1105,8 +1117,8 @@ function buildBin(P){
     var dd=P.ballD+P.ballClr;
     if(dd > Math.min(w,h)-0.8) err.push('圆孔 ⌀'+dd.toFixed(1)+'mm 放不进 '+w.toFixed(1)+'×'+h.toFixed(1)+'mm 的格子（四周至少留 0.4mm）。');
   });
-  if((P.rounds||[]).length && P.ballSeat==='sphere' && (H-bt) < (P.ballD+P.ballClr)/2+0.05)
-    err.push('球面底需要孔深 ≥ 球半径：现在孔深 '+(H-bt).toFixed(1)+'mm < '+((P.ballD+P.ballClr)/2).toFixed(2)+'mm，请加大高度或减小底厚。');
+  if((P.rounds||[]).length && P.ballDepth>0 && P.ballDepth > H-0.8)
+    err.push('孔深 '+P.ballDepth+'mm 太深：盒高只有 '+H+'mm，孔底下至少要留 0.8mm。');
   var m=new Mesh();
   if(err.length)
     return {parts:[{name:'bin',mesh:m,slot:1,color:P.c1}], warnings:warn, errors:err, info:{}, size:[L,W,H]};
@@ -1147,38 +1159,48 @@ function buildBin(P){
      圆孔格: 格子矩形环(顶面)与圆孔之间用环带封顶, 圆孔壁 bt -> H, 圆孔底 z=bt */
   var roundKey={};
   (P.rounds||[]).forEach(function(q){ roundKey[q.r0+','+q.c0+','+q.r1+','+q.c1]=1; });
-  var holeR=(P.ballD+P.ballClr)/2, nRound=0;
+  var holeR=(P.ballD+P.ballClr)/2, nRound=0, lastTopD=holeR*2, lastDepth=H-bt;
   for(var ci=0; ci<rects.length; ci++){
     var qc=rects[ci].cell;
-    if(roundKey[qc.r0+','+qc.c0+','+qc.r1+','+qc.c1]){
+    if(rects[ci].part===undefined && roundKey[qc.r0+','+qc.c0+','+qc.r1+','+qc.c1]){
       var rc=rects[ci], ccx=(rc.x0+rc.x1)/2, ccy=(rc.y0+rc.y1)/2;
       var rectCCW=cavRing(rc, Xs, Ys).slice().reverse(), rIds=[];
       for(var a2=0;a2<rectCCW.length;a2++) rIds.push(pH(rectCCW[a2][0],rectCCW[a2][1]));
-      var circ=circlePoly(ccx,ccy,holeR,Math.max(48,Math.ceil(holeR*8))), cTop=[];
+      var dep=Math.min(P.ballDepth>0?P.ballDepth:(H-bt), H-0.8), Rs=holeR;
+      // 球面底且孔深 < 半径: 顶口是球冠的截口, 半径 ro = √(R²-(R-d)²)
+      var rTop=(P.ballSeat==='sphere' && dep<Rs) ? Math.sqrt(Rs*Rs-(Rs-dep)*(Rs-dep)) : Rs;
+      var circ=circlePoly(ccx,ccy,rTop,Math.max(48,Math.ceil(Rs*8))), cTop=[];
       for(var a3=0;a3<circ.length;a3++) cTop.push(pH(circ[a3][0],circ[a3][1]));
       ribbon(m, rectCCW, rIds, circ, cTop, ccx, ccy);          // 顶面环带
       var circCW=circ.slice().reverse(), cTopCW=cTop.slice().reverse(), cBot=[];
+      var zBot=H-dep;                                           // 孔最低点
       if(P.ballSeat==='sphere'){
-        // 球面底: 直壁圆筒到球心高度 zc, 往下接与钢球同半径的半球凹坑, 最低点落在 z=bt
-        var zc=bt+holeR, KL=Math.max(8, Math.ceil(holeR*1.6)), prev=[];
-        for(var a5=0;a5<circCW.length;a5++) prev.push(m.addV(circCW[a5][0],circCW[a5][1],zc));
-        addWallIds(m, prev, cTopCW);                            // 直壁 zc -> H
+        // 球心 zc = 最低点 + R。孔深 ≥ R: 直壁到 zc 再接半球; 孔深 < R: 直接是球冠
+        var zc=zBot+Rs, prev=cTopCW, a0=Math.PI/2;
+        if(dep>Rs+1e-6){
+          var eq=[];
+          for(var a5=0;a5<circCW.length;a5++) eq.push(m.addV(circCW[a5][0],circCW[a5][1],zc));
+          addWallIds(m, eq, cTopCW);                            // 直壁 zc -> H
+          prev=eq;
+        } else a0=Math.asin(Math.min(1, rTop/Rs));             // 顶口所在的球面角
+        var KL=Math.max(8, Math.ceil(Rs*1.6));
         for(var kk=1;kk<KL;kk++){
-          var th=(Math.PI/2)*kk/KL, rr=holeR*Math.cos(th), zz=zc-holeR*Math.sin(th), ring=[];
+          var al=a0*(1-kk/KL), rr=Rs*Math.sin(al), zz=zc-Rs*Math.cos(al), ring=[];
           for(var a6=0;a6<circCW.length;a6++){
-            var dx=circCW[a6][0]-ccx, dy=circCW[a6][1]-ccy, f=rr/holeR;
+            var dx=circCW[a6][0]-ccx, dy=circCW[a6][1]-ccy, f=rr/rTop;
             ring.push(m.addV(ccx+dx*f, ccy+dy*f, zz));
           }
           addWallIds(m, ring, prev);                            // 球带
           prev=ring;
         }
-        var pole=m.addV(ccx,ccy,bt);                            // 球底最低点
+        var pole=m.addV(ccx,ccy,zBot);                          // 球面最低点
         for(var a7=0;a7<prev.length;a7++){ var j7=(a7+1)%prev.length; m.addT(pole, prev[j7], prev[a7]); }
       } else {
-        for(var a4=0;a4<circCW.length;a4++) cBot.push(pB(circCW[a4][0],circCW[a4][1]));
+        for(var a4=0;a4<circCW.length;a4++) cBot.push(m.addV(circCW[a4][0],circCW[a4][1],zBot));
         addWallIds(m, cBot, cTopCW);                            // 圆孔壁
-        fanFace(m, circCW, cBot, bt, true);                     // 平底
+        fanFace(m, circCW, cBot, zBot, true);                   // 平底
       }
+      lastTopD=rTop*2; lastDepth=dep;
       nRound++;
       continue;
     }
@@ -1191,9 +1213,9 @@ function buildBin(P){
     fanFace(m, ring, cb, bt, true);
   }
   if(wall<0.8) warn.push('壁厚 '+wall+'mm 不足 2 圈 0.4 喷嘴壁宽，打印可能偏脆。');
-  if(nRound && (H-bt) < P.ballD/2) warn.push('圆孔深 '+(H-bt).toFixed(1)+'mm 不到球径一半，钢球容易滚出来。');
+  if(nRound && lastDepth < P.ballD*0.3) warn.push('孔深 '+lastDepth.toFixed(1)+'mm 不到球径 30%，钢球容易滚出来。');
   return {parts:[{name:'bin', mesh:m, slot:1, color:P.c1}], warnings:warn, errors:err,
-          info:{cells:rects.length, cw:cc.cw, ch:cc.ch, rounds:nRound, holeD:holeR*2, depth:H-bt}, size:[L,W,H]};
+          info:{cells:rects.length, cw:cc.cw, ch:cc.ch, rounds:nRound, holeD:holeR*2, topD:lastTopD, depth:lastDepth}, size:[L,W,H]};
 }
 </script>
 <script>
@@ -1528,7 +1550,7 @@ function binParams(){
            bot:num('b_bot'), radius:num('b_rad'),
            cols:Math.max(1,Math.round(num('b_cols'))), rows:Math.max(1,Math.round(num('b_rows'))),
            merges:UI.merges.slice(), rounds:(UI.rounds||[]).slice(),
-           ballD:num('b_ballD'), ballClr:num('b_ballClr'), ballSeat:$('b_ballSeat').value,
+           ballD:num('b_ballD'), ballClr:num('b_ballClr'), ballSeat:$('b_ballSeat').value, ballDepth:num('b_ballDepth'),
            c1:$('b_c1t').value, c2:$('b_c2t').value };
 }
 /* 叠色层预设: [外扩mm, 厚度mm, 颜色] 从下往上 */
@@ -1581,7 +1603,7 @@ function setParams(tab, o){
     plate:{style:'p_style',bridge:'p_bridge',len:'p_len',wid:'p_wid',thk:'p_thk',radius:'p_rad',text:'p_text',emb:'p_emb',size:'p_size',
            leading:'p_lead',track:'p_track',margin:'p_marg',align:'p_align',c1:'p_c1t',c2:'p_c2t',fname:'fname'},
     bin:  {len:'b_len',wid:'b_wid',hgt:'b_hgt',wall:'b_wall',bot:'b_bot',radius:'b_rad',
-           cols:'b_cols',rows:'b_rows',ballD:'b_ballD',ballClr:'b_ballClr',ballSeat:'b_ballSeat',c1:'b_c1t',c2:'b_c2t',fname:'fname'},
+           cols:'b_cols',rows:'b_rows',ballD:'b_ballD',ballClr:'b_ballClr',ballSeat:'b_ballSeat',ballDepth:'b_ballDepth',c1:'b_c1t',c2:'b_c2t',fname:'fname'},
     key:  {text:'k_text',size:'k_size',track:'k_track',slant:'k_slant',
            ringD:'k_ringD',ringHole:'k_ringHole',ringInset:'k_ringInset',side:'k_side',fname:'fname'}
   };
@@ -1704,7 +1726,7 @@ function rebuild(){
             (model.info.pieces===1? '<b>1 (一体)</b>' : '<b style="color:#ffb648">'+model.info.pieces+'</b>')+'<br>';
   if(tab==='bin' && model.info.cells!==undefined)
     html += '格数 '+model.info.cells+' · 基本格净 '+model.info.cw.toFixed(1)+'×'+model.info.ch.toFixed(1)+'mm'+
-      (model.info.rounds? ' · 圆孔 '+model.info.rounds+' 个 ⌀'+model.info.holeD.toFixed(2)+' 深'+model.info.depth.toFixed(1)+(binParams().ballSeat==='sphere'?' 球底':' 平底'):'')+'<br>';
+      (model.info.rounds? ' · 圆孔 '+model.info.rounds+' 个 球⌀'+model.info.holeD.toFixed(2)+' 口⌀'+model.info.topD.toFixed(2)+' 深'+model.info.depth.toFixed(1)+(binParams().ballSeat==='sphere'?' 球面':' 平底'):'')+'<br>';
   if(tab==='key') html += model.parts.map(function(q){return '槽'+q.slot+' '+normHex(q.color);}).join(' · ')+' · 全 PLA';
   else html += '槽1 '+normHex(P.c1)+' · 槽2 '+normHex(P.c2)+' · PLA/PLA';
   $('stat').innerHTML=html;
@@ -1791,7 +1813,7 @@ function pruneRounds(){
 }
 function setRound(on){
   if(!UI.sel) return;
-  var hit=liveBlocks().filter(function(b){ return rectHit(b,UI.sel); });
+  var hit=liveBlocks().filter(function(b){ return rectHit(b,UI.sel) && !(b.split>1); });
   UI.rounds=(UI.rounds||[]).filter(function(z){ return !hit.some(function(b){return b.r0===z.r0&&b.c0===z.c0&&b.r1===z.r1&&b.c1===z.c1;}); });
   if(on) hit.forEach(function(b){ UI.rounds.push({r0:b.r0,c0:b.c0,r1:b.r1,c1:b.c1}); });
   drawGrid(); rebuild();
@@ -1819,7 +1841,7 @@ function drawGrid(){
   for(var i=0;i<UI.merges.length;i++){
     var m=UI.merges[i];
     for(var r=m.r0;r<=m.r1;r++) for(var c=m.c0;c<=m.c1;c++) covered[r+','+c]=1;
-    blocks.push({r0:m.r0,c0:m.c0,r1:m.r1,c1:m.c1,merged:true});
+    blocks.push({r0:m.r0,c0:m.c0,r1:m.r1,c1:m.c1,merged:true,split:m.split||1});
   }
   for(var r2=0;r2<rows;r2++) for(var c2=0;c2<cols;c2++)
     if(!covered[r2+','+c2]) blocks.push({r0:r2,c0:c2,r1:r2,c1:c2,merged:false});
@@ -1836,6 +1858,18 @@ function drawGrid(){
     d.style.height=((q.r1-q.r0+1)*chh-4)+'px';
     var nc=q.c1-q.c0+1, nr=q.r1-q.r0+1;
     var iw=nc*mcw+(nc-1)*wl, ih=nr*mch+(nr-1)*wl;
+    if(q.split>1){                                        // 均分块: 画成 n 个等宽子格
+      var n=q.split, totW=(q.c1-q.c0+1)*cw-4, gap=3, pw=(totW-(n-1)*gap)/n, sw=(iw-(n-1)*wl)/n;
+      for(var pi=0;pi<n;pi++){
+        var e=d.cloneNode(false);
+        e.style.left=(q.c0*cw+2+pi*(pw+gap))+'px'; e.style.width=pw+'px';
+        e.innerHTML='<span class="gdim">'+(+sw.toFixed(1))+'<i>×</i>'+(+ih.toFixed(1))+'</span><span class="gspan">均分 '+(pi+1)+'/'+n+'</span>';
+        e.title='内腔 '+sw.toFixed(1)+' × '+ih.toFixed(1)+' mm（'+nc+'×'+nr+' 合并后均分 '+n+' 格）';
+        e.dataset.r=q.r0; e.dataset.c=q.c0; e.dataset.r1=q.r1; e.dataset.c1=q.c1;
+        box.appendChild(e);
+      }
+      continue;
+    }
     var isRound=(UI.rounds||[]).some(function(z){return z.r0===q.r0&&z.c0===q.c0&&z.r1===q.r1&&z.c1===q.c1;});
     if(isRound){
       var hd=num('b_ballD')+num('b_ballClr');
@@ -1889,6 +1923,13 @@ function doMerge(){
   if(s.r0===s.r1 && s.c0===s.c1) return;      // 单格没什么可合的
   UI.merges = UI.merges.filter(function(m){ return !rectHit(m,s); });
   UI.merges.push(s);
+  UI.sel=s; drawGrid(); rebuild();
+}
+function doMergeEven(){
+  if(!UI.sel) return;
+  var s=expandOverMerges(UI.sel), n=Math.max(2, Math.round(num('b_splitN'))||2);
+  UI.merges = UI.merges.filter(function(m){ return !rectHit(m,s); });
+  s.split=n; UI.merges.push(s);
   UI.sel=s; drawGrid(); rebuild();
 }
 function doSplit(){
@@ -1974,9 +2015,10 @@ function boot(){
   $('b_split').addEventListener('click', doSplit);
   $('b_clear').addEventListener('click', function(){ UI.merges=[]; UI.rounds=[]; UI.sel=null; drawGrid(); rebuild(); });
   $('b_round').addEventListener('click', function(){ setRound(true); });
+  $('b_even').addEventListener('click', doMergeEven);
   $('b_unround').addEventListener('click', function(){ setRound(false); });
   $('b_ballSeat').addEventListener('change', scheduleRebuild);
-  ['b_ballD','b_ballClr'].forEach(function(id){
+  ['b_ballD','b_ballClr','b_ballDepth'].forEach(function(id){
     $(id).addEventListener('input', function(){ drawGrid(); scheduleRebuild(); });
   });
   bindGrid();
