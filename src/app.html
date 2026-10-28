@@ -19,6 +19,7 @@
   --cell:#252b38; --cellb:#454e63; --celltx:#7d8798; --gdim:#c3ccda; --glbl:#ffd27a; --cellhov:#5f6a80;
   --rd:#2a3546; --rdtx:#9fd0ff; --mg:#2e3a4d; --mgb:#5c6880; --mgtx:#aab6c8;
   --sel:rgba(90,169,255,.3); --sel2:rgba(90,169,255,.34); --seltx:#dceaff; --seldim:#fff; --mgseltx:#eaf3ff;
+  --grp:#34405a; --grpsel:#2c5a8e;
   color-scheme:dark;
 }
 :root[data-theme="light"]{
@@ -30,6 +31,7 @@
   --cell:#eef1f6; --cellb:#c3cad6; --celltx:#6b7485; --gdim:#273041; --glbl:#a65f00; --cellhov:#8f9bb0;
   --rd:#e2eeff; --rdtx:#1f6fd1; --mg:#dfe6f0; --mgb:#9aa6b8; --mgtx:#3d4757;
   --sel:rgba(31,122,224,.2); --sel2:rgba(31,122,224,.26); --seltx:#0b3d75; --seldim:#0b3d75; --mgseltx:#0b3d75;
+  --grp:#d5dde9; --grpsel:#b9d4f5;
   color-scheme:light;
 }
 *{box-sizing:border-box}
@@ -91,7 +93,10 @@ button.pri{background:linear-gradient(180deg,var(--acc),var(--acc2));border-colo
 .gcell.mg{background:var(--mg);border-color:var(--mgb);color:var(--mgtx);font-weight:600}
 .gcell.mg.sel{background:var(--sel2);border-color:var(--acc);color:var(--mgseltx)}
 #gridBox{position:relative}
-.gtag{position:absolute;transform:translate(-50%,-50%);font-size:10px;font-weight:600;color:var(--mgtx);white-space:nowrap;pointer-events:none;background:var(--mg);padding:1px 5px;border-radius:3px}
+/* 异形块: 实心不透明、无边框, 拼起来是一整块 (半透明会在重叠处出现深色点) */
+.gcell.grp{border:none;border-radius:0;background:var(--grp)}
+.gcell.grp.sel{background:var(--grpsel)}
+.gtag{position:absolute;width:max-content;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:1px;font-size:10px;font-weight:600;color:var(--mgtx);white-space:nowrap;pointer-events:none;background:var(--mg);padding:1px 5px;border-radius:3px}
 .ovl{position:absolute;left:12px;bottom:12px;background:var(--ovlbg);border:1px solid var(--line);border-radius:7px;padding:7px 11px;font:11px/1.6 ui-monospace,Menlo,monospace;color:var(--dim);backdrop-filter:blur(6px);pointer-events:none}
 .ovl b{color:var(--fg)}
 #busy{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:var(--busybg);color:var(--acc);font-size:13px;backdrop-filter:blur(1px)}
@@ -1156,7 +1161,21 @@ function binCells(P){
       if(U) gr.push({x0:X0(c), x1:X1(c), y0:Y1(r), y1:Y0(r+1)});
       if(R && U && mem[(r+1)+','+(c+1)]) gr.push({x0:X1(c), x1:X0(c+1), y0:Y1(r), y1:Y0(r+1)});
     });
-    groups.push({rects:gr, n:g.cells.length});
+    // 格底文字放在异形腔里最大的内接矩形上 (按格子数找, 再换算成 mm)
+    var r0=1e9,c0=1e9,r1=-1,c1=-1;
+    g.cells.forEach(function(q){ r0=Math.min(r0,q[0]); c0=Math.min(c0,q[1]); r1=Math.max(r1,q[0]); c1=Math.max(c1,q[1]); });
+    var best=null, bestA=-1;
+    for(var a0=r0;a0<=r1;a0++) for(var b0=c0;b0<=c1;b0++){
+      if(!mem[a0+','+b0]) continue;
+      var maxC=c1;
+      for(var a1=a0;a1<=r1 && mem[a1+','+b0];a1++){
+        var b1=b0; while(b1+1<=maxC && mem[a1+','+(b1+1)]) b1++;
+        maxC=b1;
+        var A=(X1(maxC)-X0(b0))*(Y1(a1)-Y0(a0));
+        if(A>bestA){ bestA=A; best={x0:X0(b0), x1:X1(maxC), y0:Y0(a0), y1:Y1(a1)}; }
+      }
+    }
+    groups.push({rects:gr, n:g.cells.length, key:r0+','+c0+','+r1+','+c1, lblRect:best});
   });
   for(var r2=0;r2<P.rows;r2++) for(var c2=0;c2<P.cols;c2++)
     if(!covered[r2+','+c2]) out.push({r0:r2,c0:c2,r1:r2,c1:c2});
@@ -1242,10 +1261,12 @@ function buildBin(P){
   var lblDepth = lblMode==='inlay' ? Math.min(P.lblEmb, bt-0.4) : 0;
   if(lblMode==='inlay' && P.lblEmb > bt-0.4) warn.push('嵌入深度已限制到 '+lblDepth.toFixed(1)+'mm（底厚 '+bt+'mm，下面至少留 0.4mm）。');
   if(P.font && (lblMode!=='raised' || P.lblEmb>0) && !(lblMode==='inlay' && lblDepth<0.2)){
-    for(var li=0; li<rects.length; li++){
-      var rq=rects[li], kq=rq.cell.r0+','+rq.cell.c0+','+rq.cell.r1+','+rq.cell.c1, tx=lblMap[kq];
-      if(!tx || !String(tx).trim()) continue;
-      if(rq.part===undefined && roundKey0[kq]) continue;                // 圆孔格没有平底
+    var tgts=rects.map(function(rq,i){ return {id:'r'+i, rq:rq, key:rq.cell.r0+','+rq.cell.c0+','+rq.cell.r1+','+rq.cell.c1, part:rq.part}; })
+      .concat(cc.groups.map(function(g,i){ return {id:'g'+i, rq:g.lblRect, key:g.key, group:true}; }));
+    for(var li=0; li<tgts.length; li++){
+      var rq=tgts[li].rq, kq=tgts[li].key, tx=lblMap[kq];
+      if(!tx || !String(tx).trim() || !rq) continue;
+      if(!tgts[li].group && tgts[li].part===undefined && roundKey0[kq]) continue;   // 圆孔格没有平底
       var miss=String(tx).replace(/\s/g,'').split('').filter(function(ch){ return P.font.charToGlyphIndex(ch)===0; });
       if(miss.length) warn.push('当前字体没有「'+miss.slice(0,6).join('')+'」这些字（内置字体只有西文），会被跳过。要中文请在「格底文字 → 字体」旁边上传中文 .ttf/.otf。');
       var lay=layoutText(P.font, tx, P.lblSize, 1.2, 0, 'center');
@@ -1272,7 +1293,7 @@ function buildBin(P){
         });
         if(strips.length) solid=clDiff(solid, strips);
       }
-      if(solid.length){ lblSolid[li]=solid; nLbl++; }
+      if(solid.length){ lblSolid[tgts[li].id]=solid; nLbl++; }
     }
   }
   // 地面被挖穿时, 底面 = 外轮廓 − 所有镂空字; 字的环直接复用, 与孔壁共用同一批点
@@ -1288,6 +1309,18 @@ function buildBin(P){
         for(var q=0;q<ccw.length;q++) ids[q]= same? outerIds[q] : outerIds[outerRing.length-1-q];
       }
       addFace(m, ids, safeTriangulate(rings), flip);
+    });
+  }
+  // 带嵌入/镂空字的格底: ring 为 CW 环 (栅格细分), cb 为其 z=bt 顶点
+  function labelFloor(ring, cb, solid){
+    holedFace(ring.slice().reverse(), cb.slice().reverse(), solid, pB, bt, false);   // 格底开字形孔, 法线 +Z
+    if(lblMode==='through'){ glyphWalls(solid, p0, pB); return; }                  // 穿到 z=0
+    var pL=makePool(m, bt-lblDepth);
+    glyphWalls(solid, pL, pB);                                                      // 嵌入坑壁
+    groupRings(solid).forEach(function(g){
+      var rings=[ensureCCW(g.outer)].concat(g.holes.map(ensureCW)), ids=[];
+      rings.forEach(function(r){ r.forEach(function(pt){ ids.push(pL(pt[0],pt[1])); }); });
+      addFace(m, ids, safeTriangulate(rings), false);                               // 坑底, 法线 +Z
     });
   }
   // 字形各环的竖直侧壁 zLo -> zHi, 法线朝向字形内部的空腔
@@ -1329,8 +1362,12 @@ function buildBin(P){
   Object.keys(latG).forEach(function(key){
     var ij=key.split(','), xi=+ij[0], yi=+ij[1], g=latG[key];
     var xA=Xs[xi], xB=Xs[xi+1], yA=Ys[yi], yB=Ys[yi+1];
-    var a=pB(xA,yA), b=pB(xB,yA), c=pB(xB,yB), d=pB(xA,yB);
-    m.addT(a,b,c); m.addT(a,c,d);
+    var lr=cc.groups[g].lblRect, cxL=(xA+xB)/2, cyL=(yA+yB)/2;
+    var underLbl=lblSolid['g'+g] && lblMode!=='raised' && cxL>lr.x0 && cxL<lr.x1 && cyL>lr.y0 && cyL<lr.y1;
+    if(!underLbl){
+      var a=pB(xA,yA), b=pB(xB,yA), c=pB(xB,yB), d=pB(xA,yB);
+      m.addT(a,b,c); m.addT(a,c,d);
+    }
     function wallIf(nx,ny,p,q){
       if(latG[nx+','+ny]===g) return;
       var bp=pB(p[0],p[1]), bq=pB(q[0],q[1]), tp=pH(p[0],p[1]), tq=pH(q[0],q[1]);
@@ -1340,6 +1377,11 @@ function buildBin(P){
     wallIf(xi,yi+1,[xA,yB],[xB,yB]);
     wallIf(xi+1,yi,[xB,yB],[xB,yA]);
     wallIf(xi,yi-1,[xB,yA],[xA,yA]);
+  });
+  cc.groups.forEach(function(g,gi){
+    if(!lblSolid['g'+gi] || lblMode==='raised') return;
+    var ring=cavRing(g.lblRect, Xs, Ys);
+    labelFloor(ring, ring.map(function(pt){ return pB(pt[0],pt[1]); }), lblSolid['g'+gi]);
   });
   /* ④⑤ 每个格腔: 内壁 bt -> H, 腔底 z=bt 法线 +Z
      圆孔格: 格子矩形环(顶面)与圆孔之间用环带封顶, 圆孔壁 bt -> H, 圆孔底 z=bt */
@@ -1396,21 +1438,8 @@ function buildBin(P){
       ct.push(pH(ring[t][0],ring[t][1]));       // 与栅格共用顶点
     }
     addWallIds(m, cb, ct);
-    if(lblSolid[ci] && lblMode!=='raised'){
-      var ringCCW=ring.slice().reverse(), cbCCW=cb.slice().reverse();
-      holedFace(ringCCW, cbCCW, lblSolid[ci], pB, bt, false);          // 格底开字形孔, 法线 +Z
-      if(lblMode==='through') glyphWalls(lblSolid[ci], p0, pB);        // 穿到 z=0
-      else {
-        var zLo=bt-lblDepth, pL=makePool(m, zLo);
-        glyphWalls(lblSolid[ci], pL, pB);                               // 嵌入坑壁
-        var gsI=groupRings(lblSolid[ci]);
-        gsI.forEach(function(g){
-          var rings=[ensureCCW(g.outer)].concat(g.holes.map(ensureCW)), ids=[];
-          rings.forEach(function(r){ r.forEach(function(pt){ ids.push(pL(pt[0],pt[1])); }); });
-          addFace(m, ids, safeTriangulate(rings), false);               // 坑底, 法线 +Z
-        });
-      }
-    } else fanFace(m, ring, cb, bt, true);
+    if(lblSolid['r'+ci] && lblMode!=='raised') labelFloor(ring, cb, lblSolid['r'+ci]);
+    else fanFace(m, ring, cb, bt, true);
   }
   if(wall<0.8) warn.push('壁厚 '+wall+'mm 不足 2 圈 0.4 喷嘴壁宽，打印可能偏脆。');
   if(nRound && lastDepth < P.ballD*0.3) warn.push('孔深 '+lastDepth.toFixed(1)+'mm 不到球径 30%，钢球容易滚出来。');
@@ -2013,8 +2042,15 @@ function normSel(a,b){
 }
 function rectHit(a,b){ return !(a.r1<b.r0 || b.r1<a.r0 || a.c1<b.c0 || b.c1<a.c0); }
 /* 选区 = 格子集合 {'r,c':1}, 可以是任意形状 (⌘/Ctrl 加选) */
+/* 异形块也当成一个"块": 键用外包框 r0,c0,r1,c1 (不会和别的块重复), cells 是真实成员 */
+function groupBlock(g){
+  var b={r0:1e9,c0:1e9,r1:-1,c1:-1,cells:g.cells,group:true};
+  g.cells.forEach(function(q){ b.r0=Math.min(b.r0,q[0]); b.c0=Math.min(b.c0,q[1]); b.r1=Math.max(b.r1,q[0]); b.c1=Math.max(b.c1,q[1]); });
+  return b;
+}
 function selHit(b){
   if(!UI.sel) return false;
+  if(b.cells) return groupHit(b);
   for(var r=b.r0;r<=b.r1;r++) for(var c=b.c0;c<=b.c1;c++) if(UI.sel[r+','+c]) return true;
   return false;
 }
@@ -2063,7 +2099,7 @@ function dropBlocksIn(set){
 function liveBlocks(){
   var rows=Math.max(1,Math.round(num('b_rows'))), cols=Math.max(1,Math.round(num('b_cols'))), cov={}, out=[];
   UI.merges.forEach(function(m){ out.push(m); for(var r=m.r0;r<=m.r1;r++) for(var c=m.c0;c<=m.c1;c++) cov[r+','+c]=1; });
-  (UI.groups||[]).forEach(function(g){ g.cells.forEach(function(q){ cov[q[0]+','+q[1]]=1; }); });
+  (UI.groups||[]).forEach(function(g){ g.cells.forEach(function(q){ cov[q[0]+','+q[1]]=1; }); out.push(groupBlock(g)); });
   for(var r=0;r<rows;r++) for(var c=0;c<cols;c++) if(!cov[r+','+c]) out.push({r0:r,c0:c,r1:r,c1:c});
   return out;
 }
@@ -2081,7 +2117,9 @@ function setLabel(on){
 }
 function setRound(on){
   if(!UI.sel) return;
-  var hit=liveBlocks().filter(function(b){ return selHit(b) && !(b.split>1); });
+  var all=liveBlocks().filter(selHit);
+  var hit=all.filter(function(b){ return !(b.split>1) && !b.group; });   // 均分块、异形块没法放圆孔
+  if(on && all.length && !hit.length){ alert('异形合并格和均分格不能设成圆孔，请选普通格或矩形合并格。'); return; }
   UI.rounds=(UI.rounds||[]).filter(function(z){ return !hit.some(function(b){return b.r0===z.r0&&b.c0===z.c0&&b.r1===z.r1&&b.c1===z.c1;}); });
   if(on) hit.forEach(function(b){ UI.rounds.push({r0:b.r0,c0:b.c0,r1:b.r1,c1:b.c1}); });
   drawGrid(); rebuild();
@@ -2169,7 +2207,7 @@ function drawGrid(){
     var mid=g.cells.slice().sort(function(a,b){ return (Math.abs(a[0]-sr)+Math.abs(a[1]-sc2))-(Math.abs(b[0]-sr)+Math.abs(b[1]-sc2)); })[0];
     function piece(x,y,w,h){
       var e=document.createElement('div');
-      e.className='gcell mg'+(on?' sel':''); e.style.borderRadius='0';
+      e.className='gcell mg grp'+(on?' sel':'');
       e.style.left=x+'px'; e.style.top=y+'px'; e.style.width=w+'px'; e.style.height=h+'px';
       e.title='异形合并 '+g.cells.length+' 格（整体一个内腔）';
       box.appendChild(e); return e;
@@ -2178,16 +2216,14 @@ function drawGrid(){
       var r=q[0], c=q[1], R=mem[r+','+(c+1)], Lf=mem[r+','+(c-1)], U=mem[(r+1)+','+c], D=mem[(r-1)+','+c];
       var x=c*cw+2, y=(rows-1-r)*chh+2, w=cw-4, h=chh-4;
       if(R) w+=4; if(U){ y-=4; h+=4; }
-      var e=piece(x,y,w,h);
-      if(R) e.style.borderRightColor='transparent';
-      if(Lf) e.style.borderLeftColor='transparent';
-      if(U) e.style.borderTopColor='transparent';
-      if(D) e.style.borderBottomColor='transparent';
-      if(R && U && mem[(r+1)+','+(c+1)]) piece((c+1)*cw-2,(rows-1-r)*chh-2,4,4).style.border='none';
+      piece(x,y,w,h);
+      if(R && U && mem[(r+1)+','+(c+1)]) piece((c+1)*cw-2,(rows-1-r)*chh-2,4,4);
       if(q===mid){                                     // 标签浮在最靠中间的那格上, 不被小格子裁掉
         var t=document.createElement('div'); t.className='gtag';
         t.style.left=(c*cw+cw/2)+'px'; t.style.top=((rows-1-r)*chh+chh/2)+'px';
-        t.textContent=g.cells.length+' 格异形合并'; box.appendChild(t);
+        var gb=groupBlock(g), lbg=(UI.labels||[]).filter(function(z){return z.r0===gb.r0&&z.c0===gb.c0&&z.r1===gb.r1&&z.c1===gb.c1;})[0];
+        t.innerHTML='<span>'+g.cells.length+' 格异形合并</span>'+(lbg?'<span class="glbl">「'+xesc(lbg.text.split('\n')[0].slice(0,10))+'」</span>':'');
+        box.appendChild(t);
       }
     });
   });
@@ -2418,6 +2454,7 @@ var I18N_EXACT={
     '; ⌘-click a selected cell to deselect it. Non-rectangular selections (e.g. an L shape) merge into one custom-shaped cell. Double-click a merged cell to split it.',
   '所选格子没有连在一起，没法合并成一个格子。':'The selected cells aren’t connected, so they can’t be merged into one cell.',
   '「均分」只能用在矩形区域上。':'“Split evenly” only works on a rectangular selection.',
+  '异形合并格和均分格不能设成圆孔，请选普通格或矩形合并格。':'Custom-shaped and evenly-split cells can’t be round pockets. Select regular cells or rectangular merges.',
   '合并所选':'Merge selected','拆开所选':'Split selected','全部还原':'Reset all',
   '所选合并后左右均分':'Merge selected, then split evenly into','成':'','格（宽度完全相等）':'cells (exactly equal width)',
   '所选设为圆孔':'Make selected round','所选恢复方格':'Make selected square',
