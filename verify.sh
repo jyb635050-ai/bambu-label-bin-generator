@@ -41,6 +41,7 @@ check F_keychain 68.388 28.97 4.2 '#1A6BD4;#FFD400'
 check H_stencil 200 100 2 '#F2F2F0;#000000'
 check I_ballbin 190 190 12 '#3C7DD9;#F0F0F0'
 check J_bintext_inlay 150 100 40 '#3C7DD9;#FF8000'
+check K_plate_inlay 200 100 2 '#FF8000;#FFFFFF'
 check G_keychain_lego 84.172 26.328 3.6 '#D7261E;#FFC800;#141414;#FFFFFF'
 echo "═════════════════════════════════════════════"
 if [ $PASS = 1 ]; then echo "✅ A/B/C 全部通过两道验收命令"; else echo "❌ 存在未通过项"; fi
