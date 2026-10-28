@@ -91,6 +91,7 @@ button.pri{background:linear-gradient(180deg,var(--acc),var(--acc2));border-colo
 .gcell.mg{background:var(--mg);border-color:var(--mgb);color:var(--mgtx);font-weight:600}
 .gcell.mg.sel{background:var(--sel2);border-color:var(--acc);color:var(--mgseltx)}
 #gridBox{position:relative}
+.gtag{position:absolute;transform:translate(-50%,-50%);font-size:10px;font-weight:600;color:var(--mgtx);white-space:nowrap;pointer-events:none;background:var(--mg);padding:1px 5px;border-radius:3px}
 .ovl{position:absolute;left:12px;bottom:12px;background:var(--ovlbg);border:1px solid var(--line);border-radius:7px;padding:7px 11px;font:11px/1.6 ui-monospace,Menlo,monospace;color:var(--dim);backdrop-filter:blur(6px);pointer-events:none}
 .ovl b{color:var(--fg)}
 #busy{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:var(--busybg);color:var(--acc);font-size:13px;backdrop-filter:blur(1px)}
@@ -176,7 +177,7 @@ Appearance inspection</textarea>
         <fieldset><legend>分格</legend>
           <div class="row"><label>列数 X</label><input type="number" id="b_cols" value="3" min="1" max="20" step="1"></div>
           <div class="row"><label>行数 Y</label><input type="number" id="b_rows" value="2" min="1" max="20" step="1"></div>
-          <p class="hint">格子里的数字是该格<b>内腔净尺寸</b>（长×宽 mm，扣掉壁厚），改参数实时更新。下图点选或拖框选相邻若干格 → <b>合并</b>，中间隔断消失，大小格混排。双击合并格可拆开。</p>
+          <p class="hint">格子里的数字是该格<b>内腔净尺寸</b>（长×宽 mm，扣掉壁厚），改参数实时更新。下图点选或拖框选相邻若干格 → <b>合并</b>，中间隔断消失，大小格混排。按住 <b>⌘</b>（Windows 用 Ctrl）点选或框选可以<b>连续加选</b>，再点一次已选的格子就是取消；选区不是矩形也能合并（比如 L 形），会变成一个整体的异形格。双击合并格可拆开。</p>
           <div id="gridWrap"><div id="gridBox"></div></div>
           <div class="btns">
             <button class="mini" id="b_merge">合并所选</button>
@@ -1140,6 +1141,23 @@ function binCells(P){
     for(var r=m.r0;r<=m.r1;r++) for(var c=m.c0;c<=m.c1;c++) covered[r+','+c]=1;
     out.push({r0:m.r0,c0:m.c0,r1:m.r1,c1:m.c1,split:m.split||1});
   }
+  /* 异形合并: 一组 4-连通的格子 = 一个整体内腔。展开成栅格对齐的小矩形:
+     每个格子 + 相邻成员之间的隔断条 + 四格全是成员时中间的十字交点 */
+  var X0=function(c){ return sn(wall+c*(cw+wall)); }, X1=function(c){ return sn(wall+c*(cw+wall)+cw); };
+  var Y0=function(r){ return sn(wall+r*(ch+wall)); }, Y1=function(r){ return sn(wall+r*(ch+wall)+ch); };
+  var groups=[];
+  (P.groups||[]).forEach(function(g){
+    var mem={}, gr=[];
+    g.cells.forEach(function(q){ mem[q[0]+','+q[1]]=1; covered[q[0]+','+q[1]]=1; });
+    g.cells.forEach(function(q){
+      var r=q[0], c=q[1], R=mem[r+','+(c+1)], U=mem[(r+1)+','+c];
+      gr.push({x0:X0(c), x1:X1(c), y0:Y0(r), y1:Y1(r)});
+      if(R) gr.push({x0:X1(c), x1:X0(c+1), y0:Y0(r), y1:Y1(r)});
+      if(U) gr.push({x0:X0(c), x1:X1(c), y0:Y1(r), y1:Y0(r+1)});
+      if(R && U && mem[(r+1)+','+(c+1)]) gr.push({x0:X1(c), x1:X0(c+1), y0:Y1(r), y1:Y0(r+1)});
+    });
+    groups.push({rects:gr, n:g.cells.length});
+  });
   for(var r2=0;r2<P.rows;r2++) for(var c2=0;c2<P.cols;c2++)
     if(!covered[r2+','+c2]) out.push({r0:r2,c0:c2,r1:r2,c1:c2});
   var rects=[];
@@ -1155,7 +1173,7 @@ function binCells(P){
       rects.push({x0:sn(sx), x1:sn(sx+sw), y0:Y0, y1:Y1, cell:q, part:pi, partW:sw});
     }
   }
-  return {rects:rects, cw:cw, ch:ch};
+  return {rects:rects, groups:groups, cw:cw, ch:ch};
 }
 /* 格腔矩形环 (CW), 在每条边上按栅格线细分, 使其边与栅格单元的边一一对齐 */
 function cavRing(r, Xs, Ys){
@@ -1202,6 +1220,7 @@ function buildBin(P){
   /* 栅格线: 内框边界 + 所有格腔边界 —— 顶面全部落在这套栅格上 */
   var xa=[sn(wall), sn(L-wall)], ya=[sn(wall), sn(W-wall)];
   for(var i=0;i<rects.length;i++){ xa.push(rects[i].x0, rects[i].x1); ya.push(rects[i].y0, rects[i].y1); }
+  cc.groups.forEach(function(g){ g.rects.forEach(function(r){ xa.push(r.x0, r.x1); ya.push(r.y0, r.y1); }); });
   var Xs=uniqSorted(xa), Ys=uniqSorted(ya);
 
   var outer = ensureCCW(roundedRect(0,0,L,W,P.radius));
@@ -1290,6 +1309,7 @@ function buildBin(P){
   /* ③a 外圈环带 (外轮廓 <-> 内框), 极角归并, 不用 earcut */
   ribbon(m, outer, oT, IR, irT, L/2, W/2);
   /* ③b 内框以里: 栅格单元, 落在格腔里的跳过 => 自然形成腔口 */
+  var latG={};                                  // 'xi,yi' -> 属于第几个异形合并腔
   for(var xi=0; xi<Xs.length-1; xi++) for(var yi=0; yi<Ys.length-1; yi++){
     var cx=(Xs[xi]+Xs[xi+1])/2, cy=(Ys[yi]+Ys[yi+1])/2, inCav=false;
     for(var q=0;q<rects.length;q++){
@@ -1297,9 +1317,30 @@ function buildBin(P){
       if(cx>r.x0 && cx<r.x1 && cy>r.y0 && cy<r.y1){ inCav=true; break; }
     }
     if(inCav) continue;
+    for(var gq=0;gq<cc.groups.length && !inCav;gq++) cc.groups[gq].rects.forEach(function(r){
+      if(cx>r.x0 && cx<r.x1 && cy>r.y0 && cy<r.y1){ inCav=true; latG[xi+','+yi]=gq; }
+    });
+    if(inCav) continue;
     var a=pH(Xs[xi],Ys[yi]), b=pH(Xs[xi+1],Ys[yi]), c=pH(Xs[xi+1],Ys[yi+1]), d=pH(Xs[xi],Ys[yi+1]);
     m.addT(a,b,c); m.addT(a,c,d);              // CCW => +Z
   }
+  /* 异形合并腔: 逐个栅格单元铺腔底 (z=bt, +Z); 与非本腔单元相邻的边立一面内壁。
+     边按单元 CW 方向走 (腔在右手边), 与 cavRing + addWallIds 的朝向一致 */
+  Object.keys(latG).forEach(function(key){
+    var ij=key.split(','), xi=+ij[0], yi=+ij[1], g=latG[key];
+    var xA=Xs[xi], xB=Xs[xi+1], yA=Ys[yi], yB=Ys[yi+1];
+    var a=pB(xA,yA), b=pB(xB,yA), c=pB(xB,yB), d=pB(xA,yB);
+    m.addT(a,b,c); m.addT(a,c,d);
+    function wallIf(nx,ny,p,q){
+      if(latG[nx+','+ny]===g) return;
+      var bp=pB(p[0],p[1]), bq=pB(q[0],q[1]), tp=pH(p[0],p[1]), tq=pH(q[0],q[1]);
+      m.addT(bp,bq,tq); m.addT(bp,tq,tp);
+    }
+    wallIf(xi-1,yi,[xA,yA],[xA,yB]);
+    wallIf(xi,yi+1,[xA,yB],[xB,yB]);
+    wallIf(xi+1,yi,[xB,yB],[xB,yA]);
+    wallIf(xi,yi-1,[xB,yA],[xA,yA]);
+  });
   /* ④⑤ 每个格腔: 内壁 bt -> H, 腔底 z=bt 法线 +Z
      圆孔格: 格子矩形环(顶面)与圆孔之间用环带封顶, 圆孔壁 bt -> H, 圆孔底 z=bt */
   var roundKey={};
@@ -1383,7 +1424,7 @@ function buildBin(P){
   var partsOut=[{name:'bin', mesh:m, slot:1, color:P.c1}];
   if(tm.nt()>0) partsOut.push({name:'floor text', mesh:tm, slot:P.lblSlot2?2:1, color:P.lblSlot2?P.c2:P.c1});
   return {parts:partsOut, warnings:warn, errors:err,
-          info:{cells:rects.length, cw:cc.cw, ch:cc.ch, rounds:nRound, holeD:holeR*2, topD:lastTopD, depth:lastDepth, labels:nLbl}, size:[L,W,H]};
+          info:{cells:rects.length+cc.groups.length, cw:cc.cw, ch:cc.ch, rounds:nRound, holeD:holeR*2, topD:lastTopD, depth:lastDepth, labels:nLbl}, size:[L,W,H]};
 }
 </script>
 <script>
@@ -1665,7 +1706,7 @@ function showModel(model){
 <script>
 "use strict";
 /* ================================================== UI 状态与装配 */
-var UI = { tab:'plate', fonts:{}, fontSel:null, merges:[], rounds:[], labels:[], sel:null, model:null, last:null };
+var UI = { tab:'plate', fonts:{}, fontSel:null, merges:[], groups:[], rounds:[], labels:[], sel:null, model:null, last:null };
 function $(id){ return document.getElementById(id); }
 function num(id){ var v=parseFloat($(id).value); return isFinite(v)?v:0; }
 
@@ -1719,7 +1760,7 @@ function binParams(){
   return { len:num('b_len'), wid:num('b_wid'), hgt:num('b_hgt'), wall:num('b_wall'),
            bot:num('b_bot'), radius:num('b_rad'),
            cols:Math.max(1,Math.round(num('b_cols'))), rows:Math.max(1,Math.round(num('b_rows'))),
-           merges:UI.merges.slice(), rounds:(UI.rounds||[]).slice(),
+           merges:UI.merges.slice(), groups:(UI.groups||[]).slice(), rounds:(UI.rounds||[]).slice(),
            ballD:num('b_ballD'), ballClr:num('b_ballClr'), ballSeat:$('b_ballSeat').value, ballDepth:num('b_ballDepth'),
            labels:(UI.labels||[]).slice(), lblSize:num('b_lblSize'), lblEmb:num('b_lblEmb'),
            lblMode:$('b_lblMode').value, lblBridge:num('b_lblBridge'),
@@ -1783,6 +1824,7 @@ function setParams(tab, o){
   var map = maps[tab];
   for(var k in o){
     if(k==='merges'){ UI.merges=o[k].slice(); continue; }
+    if(k==='groups'){ UI.groups=o[k].slice(); continue; }
     if(k==='rounds'){ UI.rounds=o[k].slice(); continue; }
     if(k==='labels'){ UI.labels=o[k].slice(); continue; }
     if(k==='lblSlot2'){ $('b_lblSlot2').checked=!!o[k]; continue; }
@@ -1970,27 +2012,58 @@ function normSel(a,b){
   return { r0:Math.min(a.r,b.r), c0:Math.min(a.c,b.c), r1:Math.max(a.r,b.r), c1:Math.max(a.c,b.c) };
 }
 function rectHit(a,b){ return !(a.r1<b.r0 || b.r1<a.r0 || a.c1<b.c0 || b.c1<a.c0); }
-/* 选区必须吞掉所有与之相交的既有合并块, 反复扩张直到稳定 */
-function expandOverMerges(sel){
-  var s={r0:sel.r0,c0:sel.c0,r1:sel.r1,c1:sel.c1}, changed=true;
+/* 选区 = 格子集合 {'r,c':1}, 可以是任意形状 (⌘/Ctrl 加选) */
+function selHit(b){
+  if(!UI.sel) return false;
+  for(var r=b.r0;r<=b.r1;r++) for(var c=b.c0;c<=b.c1;c++) if(UI.sel[r+','+c]) return true;
+  return false;
+}
+function groupHit(g, set){
+  set=set||UI.sel; if(!set) return false;
+  return g.cells.some(function(q){ return set[q[0]+','+q[1]]; });
+}
+function rectKeys(s){ var o={}; for(var r=s.r0;r<=s.r1;r++) for(var c=s.c0;c<=s.c1;c++) o[r+','+c]=1; return o; }
+/* 选区吞掉所有碰到的合并块 / 异形块, 反复扩张直到稳定 */
+function expandSel(){
+  var set={}, changed=true;
+  Object.keys(UI.sel||{}).forEach(function(k){ set[k]=1; });
   while(changed){
     changed=false;
-    for(var i=0;i<UI.merges.length;i++){
-      var m=UI.merges[i];
-      if(rectHit(s,m)){
-        var nr0=Math.min(s.r0,m.r0), nc0=Math.min(s.c0,m.c0),
-            nr1=Math.max(s.r1,m.r1), nc1=Math.max(s.c1,m.c1);
-        if(nr0!==s.r0||nc0!==s.c0||nr1!==s.r1||nc1!==s.c1){
-          s={r0:nr0,c0:nc0,r1:nr1,c1:nc1}; changed=true;
-        }
-      }
-    }
+    UI.merges.forEach(function(m){
+      if(!selHitSet(m,set)) return;
+      for(var r=m.r0;r<=m.r1;r++) for(var c=m.c0;c<=m.c1;c++) if(!set[r+','+c]){ set[r+','+c]=1; changed=true; }
+    });
+    (UI.groups||[]).forEach(function(g){
+      if(!groupHit(g,set)) return;
+      g.cells.forEach(function(q){ var k=q[0]+','+q[1]; if(!set[k]){ set[k]=1; changed=true; } });
+    });
   }
-  return s;
+  return set;
+}
+function selHitSet(b,set){ for(var r=b.r0;r<=b.r1;r++) for(var c=b.c0;c<=b.c1;c++) if(set[r+','+c]) return true; return false; }
+function setBBox(set){
+  var b={r0:1e9,c0:1e9,r1:-1,c1:-1};
+  Object.keys(set).forEach(function(k){ var q=k.split(','), r=+q[0], c=+q[1];
+    b.r0=Math.min(b.r0,r); b.c0=Math.min(b.c0,c); b.r1=Math.max(b.r1,r); b.c1=Math.max(b.c1,c); });
+  return b;
+}
+function setConnected(set){
+  var keys=Object.keys(set); if(!keys.length) return false;
+  var seen={}, st=[keys[0]]; seen[keys[0]]=1;
+  while(st.length){
+    var q=st.pop().split(','), r=+q[0], c=+q[1];
+    [[r+1,c],[r-1,c],[r,c+1],[r,c-1]].forEach(function(n){ var k=n[0]+','+n[1]; if(set[k] && !seen[k]){ seen[k]=1; st.push(k); } });
+  }
+  return Object.keys(seen).length===keys.length;
+}
+function dropBlocksIn(set){
+  UI.merges=UI.merges.filter(function(m){ return !selHitSet(m,set); });
+  UI.groups=(UI.groups||[]).filter(function(g){ return !groupHit(g,set); });
 }
 function liveBlocks(){
   var rows=Math.max(1,Math.round(num('b_rows'))), cols=Math.max(1,Math.round(num('b_cols'))), cov={}, out=[];
   UI.merges.forEach(function(m){ out.push(m); for(var r=m.r0;r<=m.r1;r++) for(var c=m.c0;c<=m.c1;c++) cov[r+','+c]=1; });
+  (UI.groups||[]).forEach(function(g){ g.cells.forEach(function(q){ cov[q[0]+','+q[1]]=1; }); });
   for(var r=0;r<rows;r++) for(var c=0;c<cols;c++) if(!cov[r+','+c]) out.push({r0:r,c0:c,r1:r,c1:c});
   return out;
 }
@@ -2001,14 +2074,14 @@ function pruneRounds(){
 }
 function setLabel(on){
   var txt=$('b_lblText').value;
-  var hit=liveBlocks().filter(function(b){ return !UI.sel || rectHit(b,UI.sel); });
+  var hit=liveBlocks().filter(function(b){ return !UI.sel || selHit(b); });
   UI.labels=(UI.labels||[]).filter(function(z){ return !hit.some(function(b){return b.r0===z.r0&&b.c0===z.c0&&b.r1===z.r1&&b.c1===z.c1;}); });
   if(on && txt.trim()) hit.forEach(function(b){ UI.labels.push({r0:b.r0,c0:b.c0,r1:b.r1,c1:b.c1,text:txt}); });
   drawGrid(); rebuild();
 }
 function setRound(on){
   if(!UI.sel) return;
-  var hit=liveBlocks().filter(function(b){ return rectHit(b,UI.sel) && !(b.split>1); });
+  var hit=liveBlocks().filter(function(b){ return selHit(b) && !(b.split>1); });
   UI.rounds=(UI.rounds||[]).filter(function(z){ return !hit.some(function(b){return b.r0===z.r0&&b.c0===z.c0&&b.r1===z.r1&&b.c1===z.c1;}); });
   if(on) hit.forEach(function(b){ UI.rounds.push({r0:b.r0,c0:b.c0,r1:b.r1,c1:b.c1}); });
   drawGrid(); rebuild();
@@ -2016,7 +2089,11 @@ function setRound(on){
 function clampMerges(){
   var rows=Math.max(1,Math.round(num('b_rows'))), cols=Math.max(1,Math.round(num('b_cols')));
   UI.merges = UI.merges.filter(function(m){ return m.r1<rows && m.c1<cols; });
-  if(UI.sel && (UI.sel.r1>=rows || UI.sel.c1>=cols)) UI.sel=null;
+  UI.groups = (UI.groups||[]).filter(function(g){ return g.cells.every(function(q){ return q[0]<rows && q[1]<cols; }); });
+  if(UI.sel){
+    Object.keys(UI.sel).forEach(function(k){ var q=k.split(','); if(+q[0]>=rows || +q[1]>=cols) delete UI.sel[k]; });
+    if(!Object.keys(UI.sel).length) UI.sel=null;
+  }
 }
 function drawGrid(){
   clampMerges(); pruneRounds();
@@ -2038,6 +2115,7 @@ function drawGrid(){
     for(var r=m.r0;r<=m.r1;r++) for(var c=m.c0;c<=m.c1;c++) covered[r+','+c]=1;
     blocks.push({r0:m.r0,c0:m.c0,r1:m.r1,c1:m.c1,merged:true,split:m.split||1});
   }
+  (UI.groups||[]).forEach(function(g){ g.cells.forEach(function(q){ covered[q[0]+','+q[1]]=1; }); });
   for(var r2=0;r2<rows;r2++) for(var c2=0;c2<cols;c2++)
     if(!covered[r2+','+c2]) blocks.push({r0:r2,c0:c2,r1:r2,c1:c2,merged:false});
 
@@ -2045,7 +2123,7 @@ function drawGrid(){
     var q=blocks[b];
     var d=document.createElement('div');
     d.className='gcell'+(q.merged?' mg':'');
-    if(UI.sel && rectHit(q, UI.sel)) d.className+=' sel';
+    if(selHit(q)) d.className+=' sel';
     // 行号从下往上画, 与 3D 里 +Y 一致
     d.style.left=(q.c0*cw+2)+'px';
     d.style.top=((rows-1-q.r1)*chh+2)+'px';
@@ -2083,6 +2161,36 @@ function drawGrid(){
     d.dataset.r=q.r0; d.dataset.c=q.c0; d.dataset.r1=q.r1; d.dataset.c1=q.c1;
     box.appendChild(d);
   }
+  /* 异形合并: 每个成员格一块, 朝相邻成员方向补上缝隙、去掉那一侧边框, 看起来是一整块 */
+  (UI.groups||[]).forEach(function(g){
+    var mem={}, sr=0, sc2=0, on=groupHit(g);
+    g.cells.forEach(function(q){ mem[q[0]+','+q[1]]=1; sr+=q[0]; sc2+=q[1]; });
+    sr/=g.cells.length; sc2/=g.cells.length;
+    var mid=g.cells.slice().sort(function(a,b){ return (Math.abs(a[0]-sr)+Math.abs(a[1]-sc2))-(Math.abs(b[0]-sr)+Math.abs(b[1]-sc2)); })[0];
+    function piece(x,y,w,h){
+      var e=document.createElement('div');
+      e.className='gcell mg'+(on?' sel':''); e.style.borderRadius='0';
+      e.style.left=x+'px'; e.style.top=y+'px'; e.style.width=w+'px'; e.style.height=h+'px';
+      e.title='异形合并 '+g.cells.length+' 格（整体一个内腔）';
+      box.appendChild(e); return e;
+    }
+    g.cells.forEach(function(q){
+      var r=q[0], c=q[1], R=mem[r+','+(c+1)], Lf=mem[r+','+(c-1)], U=mem[(r+1)+','+c], D=mem[(r-1)+','+c];
+      var x=c*cw+2, y=(rows-1-r)*chh+2, w=cw-4, h=chh-4;
+      if(R) w+=4; if(U){ y-=4; h+=4; }
+      var e=piece(x,y,w,h);
+      if(R) e.style.borderRightColor='transparent';
+      if(Lf) e.style.borderLeftColor='transparent';
+      if(U) e.style.borderTopColor='transparent';
+      if(D) e.style.borderBottomColor='transparent';
+      if(R && U && mem[(r+1)+','+(c+1)]) piece((c+1)*cw-2,(rows-1-r)*chh-2,4,4).style.border='none';
+      if(q===mid){                                     // 标签浮在最靠中间的那格上, 不被小格子裁掉
+        var t=document.createElement('div'); t.className='gtag';
+        t.style.left=(c*cw+cw/2)+'px'; t.style.top=((rows-1-r)*chh+chh/2)+'px';
+        t.textContent=g.cells.length+' 格异形合并'; box.appendChild(t);
+      }
+    });
+  });
 }
 function bindGrid(){
   var box=$('gridBox'), anchor=null, dragging=false;
@@ -2094,47 +2202,66 @@ function bindGrid(){
     c=Math.max(0,Math.min(cols-1,c)); rr=Math.max(0,Math.min(rows-1,rr));
     return {r:rows-1-rr, c:c};
   }
+  var base={}, adding=true;
+  // 普通拖 = 新选区; 按住 ⌘/Ctrl = 在原选区上加选, 从已选格子开始拖则是减选
+  function apply(cur){
+    var s={}; Object.keys(base).forEach(function(k){ s[k]=1; });
+    Object.keys(rectKeys(normSel(anchor,cur))).forEach(function(k){ if(adding) s[k]=1; else delete s[k]; });
+    UI.sel=Object.keys(s).length? s : null; drawGrid();
+  }
   box.addEventListener('pointerdown',function(e){
     e.preventDefault();
     anchor=cellAt(e); dragging=true;
-    UI.sel=normSel(anchor,anchor); drawGrid();
+    if(e.metaKey||e.ctrlKey){
+      base={}; Object.keys(UI.sel||{}).forEach(function(k){ base[k]=1; });
+      adding=!base[anchor.r+','+anchor.c];
+    } else { base={}; adding=true; }
+    apply(anchor);
     box.setPointerCapture(e.pointerId);
   });
   box.addEventListener('pointermove',function(e){
     if(!dragging) return;
-    UI.sel=normSel(anchor, cellAt(e)); drawGrid();
+    apply(cellAt(e));
   });
   function end(e){ if(dragging){ dragging=false; try{box.releasePointerCapture(e.pointerId);}catch(_){} } }
   box.addEventListener('pointerup',end);
+  box.addEventListener('contextmenu',function(e){ e.preventDefault(); });   // Mac 上 Ctrl+点 会弹右键菜单
   box.addEventListener('pointercancel',end);
   box.addEventListener('dblclick',function(e){
     var p=cellAt(e), before=UI.merges.length;
     UI.merges=UI.merges.filter(function(m){
       return !(p.r>=m.r0&&p.r<=m.r1&&p.c>=m.c0&&p.c<=m.c1);
     });
-    if(UI.merges.length!==before){ UI.sel=null; drawGrid(); rebuild(); }
+    var one={}, gb=UI.groups.length; one[p.r+','+p.c]=1;
+    UI.groups=UI.groups.filter(function(g){ return !groupHit(g,one); });
+    if(UI.merges.length!==before || UI.groups.length!==gb){ UI.sel=null; drawGrid(); rebuild(); }
   });
 }
+/* 选区正好是矩形 => 普通合并; 不是矩形但连成一片 => 异形合并 (一个整体内腔) */
 function doMerge(){
   if(!UI.sel) return;
-  var s=expandOverMerges(UI.sel);
-  if(s.r0===s.r1 && s.c0===s.c1) return;      // 单格没什么可合的
-  UI.merges = UI.merges.filter(function(m){ return !rectHit(m,s); });
-  UI.merges.push(s);
-  UI.sel=s; drawGrid(); rebuild();
+  var set=expandSel(), keys=Object.keys(set), b=setBBox(set);
+  if(keys.length<2) return;                   // 单格没什么可合的
+  var isRect = keys.length===(b.r1-b.r0+1)*(b.c1-b.c0+1);
+  if(!isRect && !setConnected(set)){ alert('所选格子没有连在一起，没法合并成一个格子。'); return; }
+  dropBlocksIn(set);
+  if(isRect) UI.merges.push(b);
+  else UI.groups.push({cells:keys.map(function(k){ var q=k.split(','); return [+q[0],+q[1]]; })});
+  UI.sel=set; drawGrid(); rebuild();
 }
 function doMergeEven(){
   if(!UI.sel) return;
-  var s=expandOverMerges(UI.sel), n=Math.max(2, Math.round(num('b_splitN'))||2);
-  UI.merges = UI.merges.filter(function(m){ return !rectHit(m,s); });
-  s.split=n; UI.merges.push(s);
-  UI.sel=s; drawGrid(); rebuild();
+  var set=expandSel(), b=setBBox(set), n=Math.max(2, Math.round(num('b_splitN'))||2);
+  if(Object.keys(set).length!==(b.r1-b.r0+1)*(b.c1-b.c0+1)){ alert('「均分」只能用在矩形区域上。'); return; }
+  dropBlocksIn(set);
+  b.split=n; UI.merges.push(b);
+  UI.sel=set; drawGrid(); rebuild();
 }
 function doSplit(){
   if(!UI.sel) return;
-  var before=UI.merges.length;
-  UI.merges=UI.merges.filter(function(m){ return !rectHit(m,UI.sel); });
-  if(UI.merges.length!==before){ drawGrid(); rebuild(); }
+  var before=UI.merges.length+UI.groups.length;
+  dropBlocksIn(UI.sel);
+  if(UI.merges.length+UI.groups.length!==before){ drawGrid(); rebuild(); }
 }
 
 /* ================================================ 事件绑定 & 启动 */
@@ -2213,7 +2340,7 @@ function boot(){
 
   $('b_merge').addEventListener('click', doMerge);
   $('b_split').addEventListener('click', doSplit);
-  $('b_clear').addEventListener('click', function(){ UI.merges=[]; UI.rounds=[]; UI.labels=[]; UI.sel=null; drawGrid(); rebuild(); });
+  $('b_clear').addEventListener('click', function(){ UI.merges=[]; UI.groups=[]; UI.rounds=[]; UI.labels=[]; UI.sel=null; drawGrid(); rebuild(); });
   $('b_round').addEventListener('click', function(){ setRound(true); });
   $('b_even').addEventListener('click', doMergeEven);
   $('b_lblAdd').addEventListener('click', function(){ setLabel(true); });
@@ -2285,7 +2412,12 @@ var I18N_EXACT={
   '（长×宽 mm，扣掉壁厚），改参数实时更新。下图点选或拖框选相邻若干格 →':
     ' (L×W mm, walls excluded), updated live. Click or drag-select adjacent cells below →',
   '合并':'Merge',
-  '，中间隔断消失，大小格混排。双击合并格可拆开。':' to remove the dividers between them and mix cell sizes. Double-click a merged cell to split it.',
+  '，中间隔断消失，大小格混排。按住':' to remove the dividers between them and mix cell sizes. Hold ',
+  '（Windows 用 Ctrl）点选或框选可以':' (Ctrl on Windows) while clicking or dragging to ','连续加选':'add to the selection',
+  '，再点一次已选的格子就是取消；选区不是矩形也能合并（比如 L 形），会变成一个整体的异形格。双击合并格可拆开。':
+    '; ⌘-click a selected cell to deselect it. Non-rectangular selections (e.g. an L shape) merge into one custom-shaped cell. Double-click a merged cell to split it.',
+  '所选格子没有连在一起，没法合并成一个格子。':'The selected cells aren’t connected, so they can’t be merged into one cell.',
+  '「均分」只能用在矩形区域上。':'“Split evenly” only works on a rectangular selection.',
   '合并所选':'Merge selected','拆开所选':'Split selected','全部还原':'Reset all',
   '所选合并后左右均分':'Merge selected, then split evenly into','成':'','格（宽度完全相等）':'cells (exactly equal width)',
   '所选设为圆孔':'Make selected round','所选恢复方格':'Make selected square',
@@ -2379,7 +2511,8 @@ var I18N_RULES=[
   [/内腔 ([\d.]+) × ([\d.]+) mm（(\d+)×(\d+) 合并后均分 (\d+) 格）/g,'Inner $1 × $2 mm ($3×$4 merged, split into $5)'],
   [/圆孔 ⌀([\d.]+) mm（格子 ([\d.]+)×([\d.]+)）/g,'Round pocket ⌀$1 mm (cell $2×$3)'],
   [/内腔 /g,'Inner '],[/均分 (\d+)\/(\d+)/g,'Split $1/$2'],[/(\d+)×(\d+) 合并/g,'$1×$2 merged'],
-  [/启用第 (\d+) 层/g,'Enable layer $1'],[/^上传: /,'Uploaded: '],
+  [/启用第 (\d+) 层/g,'Enable layer $1'],
+  [/(\d+) 格异形合并/g,'$1 cells merged'],[/异形合并 (\d+) 格（整体一个内腔）/g,'Custom merge of $1 cells (one cavity)'],[/^上传: /,'Uploaded: '],
   // 弹窗
   [/^已保存 (.*?)\.3mf\.zip[\s\S]*$/,'Saved $1.3mf.zip\n\n⚠ Don’t double-click this .zip — a Mac will unzip it into a folder.\nRight-click → Rename, delete the trailing .zip (choose “Use .3mf” when asked), then double-click to slice.\n\nIf Safari unzipped it automatically: Safari Settings → General → uncheck “Open ‘safe’ files after downloading”.\nTo skip renaming, export from the local label-bin-generator.html, which saves a .3mf directly.'],
   [/这个页面里无法下载（(.*?)）。请用本地 label-bin-generator.html 导出。/g,'Downloads aren’t possible on this page ($1). Please export from the local label-bin-generator.html.'],
@@ -2482,7 +2615,7 @@ function saveState(){
       v[el.id] = el.type==='checkbox' ? el.checked : el.value;
     });
     var fk=null; for(var k in UI.fonts) if(UI.fonts[k]===UI.fontSel && k[0]==='b') fk=k;
-    localStorage.setItem(STATE_KEY, JSON.stringify({v:v, tab:UI.tab, merges:UI.merges, rounds:UI.rounds||[], labels:UI.labels||[], font:fk}));
+    localStorage.setItem(STATE_KEY, JSON.stringify({v:v, tab:UI.tab, merges:UI.merges, groups:UI.groups||[], rounds:UI.rounds||[], labels:UI.labels||[], font:fk}));
   }catch(e){}
 }
 function loadState(){
@@ -2493,7 +2626,7 @@ function loadState(){
     var el=document.getElementById(id); if(!el || id==='p_font' || id==='k_font' || id==='b_font') return;
     if(el.type==='checkbox') el.checked=!!st.v[id]; else el.value=st.v[id];
   });
-  UI.merges=st.merges||[]; UI.rounds=st.rounds||[]; UI.labels=st.labels||[];
+  UI.merges=st.merges||[]; UI.groups=st.groups||[]; UI.rounds=st.rounds||[]; UI.labels=st.labels||[];
   if(st.font) pickFont(st.font);
   if(typeof syncLayerRows==='function') syncLayerRows();
   if(st.tab) switchTab(st.tab);
