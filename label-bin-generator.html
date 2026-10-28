@@ -60,6 +60,7 @@ button.pri{background:linear-gradient(180deg,var(--acc),var(--acc2));border-colo
 .gdim{font:600 10.5px ui-monospace,Menlo,monospace;color:#c3ccda;white-space:nowrap}
 .gdim i{font-style:normal;color:#6b7688;margin:0 1px}
 .gspan{font-size:9px;color:#7d8798}
+.glbl{font-size:9.5px;color:#ffd27a;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gcell.rd{background:#2a3546;border-color:#5aa9ff}
 .gcell.rd .gdim{color:#9fd0ff}
 .gcell.sel .gdim{color:#fff}
@@ -170,10 +171,26 @@ Appearance inspection</textarea>
           <p class="hint">放钢球/轴承等圆形件：选中格子 → <b>所选设为圆孔</b>，该格变成一个居中的圆形窝。实际孔径 = 直径 + 间隙（FDM 打出来的孔会偏小，0.3–0.5 比较稳）。孔深 = 顶面到孔最低点的距离（填 0 = 一直挖到底厚）。球面底 = 孔底是这个直径的球面；孔深小于半径时就是一个浅碗（球冠），口径会比直径小一点。</p>
         </fieldset>
 
+        <fieldset><legend>格底文字</legend>
+          <textarea id="b_lblText" placeholder="比如：M3 螺丝">M3 螺丝</textarea>
+          <div class="btns">
+            <button class="mini" id="b_lblAdd">给所选格加文字</button>
+            <button class="mini" id="b_lblDel">清除所选格文字</button>
+          </div>
+          <div class="row"><label>做法</label><select id="b_lblMode"><option value="raised">凸起（文字立起来）</option><option value="inlay">嵌入（凹进去再用 2 号色填平）</option><option value="through">镂空（字穿透盒底，单色）</option></select></div>
+          <div class="row" id="b_lblEmbRow"><label id="b_lblEmbLabel">凸起高度</label><input type="number" id="b_lblEmb" value="1" min="0.2" max="50" step="0.2"><span class="u">mm</span></div>
+          <div class="row" id="b_lblBridgeRow" style="display:none"><label>连接桥宽</label><input type="number" id="b_lblBridge" value="1.2" min="0.8" max="6" step="0.1"><span class="u">mm</span></div>
+          <div class="row"><label>字号 em</label><input type="number" id="b_lblSize" value="14" min="2" max="150" step="0.5"><span class="u">mm</span></div>
+          <div class="row"><label>字体</label><select id="b_font"></select></div>
+          <div class="btns" style="margin-top:0"><button class="mini" id="b_upload">上传 .ttf / .otf（中文字体）…</button></div>
+          <div class="row"><label>双色</label><input type="checkbox" id="b_lblSlot2" checked style="width:auto"><span class="hint" style="margin:0">文字走 2 号槽颜色（不勾 = 和盒体同色）</span></div>
+          <p class="hint">凸起 = 字立在格底；嵌入 = 字凹进格底再用 2 号色填平（深度最多到底厚 −0.4）；镂空 = 字挖穿盒底，O/A/B 中间自动加桥。没选格子时点按钮 = 所有格子都加。字号是上限，格子放不下会自动缩小。可多行。</p>
+        </fieldset>
+
         <fieldset><legend>颜色</legend>
           <div class="row"><label>盒体 槽1</label><div class="sw"><input type="color" id="b_c1" value="#3C7DD9"><input type="text" id="b_c1t" value="#3C7DD9"></div></div>
-          <div class="row"><label>备用 槽2</label><div class="sw"><input type="color" id="b_c2" value="#F0F0F0"><input type="text" id="b_c2t" value="#F0F0F0"></div></div>
-          <p class="hint">一体式一次打印、底部封实，整体走 1 号槽。</p>
+          <div class="row"><label>文字 槽2</label><div class="sw"><input type="color" id="b_c2" value="#F0F0F0"><input type="text" id="b_c2t" value="#F0F0F0"></div></div>
+          <p class="hint">一体式一次打印、底部封实。盒体走 1 号槽，格底文字走 2 号槽。</p>
         </fieldset>
       </div>
 
@@ -8787,8 +8804,78 @@ function buildBin(P){
   var irT=[];
   for(k=0;k<IR.length;k++) irT.push(pH(IR[k][0],IR[k][1]));
 
-  /* ① 底面 z=0, 法线 -Z */
-  fanFace(m, outer, oB, 0, true);
+  /* 格底文字: 先把每格的字形区域(nonzero 并集)算好, 三种做法共用
+     raised 凸起: 字从格底往上长; inlay 嵌入: 格底挖下去, 字作为 2 号料填平;
+     through 镂空: 字穿透盒底, 字腔孤岛加竖桥。 */
+  var lblMode=P.lblMode||'raised', lblSolid={}, nLbl=0, lblMap={};
+  (P.labels||[]).forEach(function(q){ lblMap[q.r0+','+q.c0+','+q.r1+','+q.c1]=q.text; });
+  var roundKey0={};
+  (P.rounds||[]).forEach(function(q){ roundKey0[q.r0+','+q.c0+','+q.r1+','+q.c1]=1; });
+  var lblDepth = lblMode==='inlay' ? Math.min(P.lblEmb, bt-0.4) : 0;
+  if(lblMode==='inlay' && P.lblEmb > bt-0.4) warn.push('嵌入深度已限制到 '+lblDepth.toFixed(1)+'mm（底厚 '+bt+'mm，下面至少留 0.4mm）。');
+  if(P.font && (lblMode!=='raised' || P.lblEmb>0) && !(lblMode==='inlay' && lblDepth<0.2)){
+    for(var li=0; li<rects.length; li++){
+      var rq=rects[li], kq=rq.cell.r0+','+rq.cell.c0+','+rq.cell.r1+','+rq.cell.c1, tx=lblMap[kq];
+      if(!tx || !String(tx).trim()) continue;
+      if(rq.part===undefined && roundKey0[kq]) continue;                // 圆孔格没有平底
+      var miss=String(tx).replace(/\s/g,'').split('').filter(function(ch){ return P.font.charToGlyphIndex(ch)===0; });
+      if(miss.length) warn.push('当前字体没有「'+miss.slice(0,6).join('')+'」这些字（内置字体只有西文），会被跳过。要中文请在「格底文字 → 字体」旁边上传中文 .ttf/.otf。');
+      var lay=layoutText(P.font, tx, P.lblSize, 1.2, 0, 'center');
+      if(!lay.bbox) continue;
+      var mg=Math.max(1.5, Math.min(rq.x1-rq.x0, rq.y1-rq.y0)*0.08);
+      var aw=(rq.x1-rq.x0)-2*mg, ah=(rq.y1-rq.y0)-2*mg;
+      var tw=lay.bbox.x1-lay.bbox.x0, th=lay.bbox.y1-lay.bbox.y0;
+      var sc=Math.min(1, aw/tw, ah/th);
+      if(sc<=0) continue;
+      if(sc<0.999 && tw*sc<6) warn.push('格子太小，文字「'+String(tx).slice(0,8)+'」缩到 '+(tw*sc).toFixed(1)+'mm 宽，可能印不清。');
+      var cxT=(lay.bbox.x0+lay.bbox.x1)/2, cyT=(lay.bbox.y0+lay.bbox.y1)/2, gx=(rq.x0+rq.x1)/2, gy=(rq.y0+rq.y1)/2, rs=[];
+      lay.rings.forEach(function(r){
+        var cl=cleanRing(r.map(function(pt){ return [(pt[0]-cxT)*sc+gx, (pt[1]-cyT)*sc+gy]; }),1e-4); if(cl) rs.push(cl);
+      });
+      var solid=clUnionNonZero(rs);
+      if(lblMode==='through'){                    // 字腔孤岛(O/A/B 中间)加竖桥, 否则会掉出去
+        var outs=[], isl=[], bw=Math.max(0.8, P.lblBridge||1.2), strips=[];
+        solid.forEach(function(q){ (signedArea(q)>0?outs:isl).push(q); });
+        isl.forEach(function(h){
+          var hb=polyBBox([h]), host=null, ha=Infinity;
+          outs.forEach(function(o){ var a=Math.abs(signedArea(o)); if(a<ha && pointInPoly(interiorPoint(h),o)){ ha=a; host=o; } });
+          var ob=host? polyBBox([host]) : hb, cxI=(hb.x0+hb.x1)/2;
+          strips.push(rectPoly(cxI-bw/2, ob.y0-0.5, cxI+bw/2, ob.y1+0.5));
+        });
+        if(strips.length) solid=clDiff(solid, strips);
+      }
+      if(solid.length){ lblSolid[li]=solid; nLbl++; }
+    }
+  }
+  // 地面被挖穿时, 底面 = 外轮廓 − 所有镂空字; 字的环直接复用, 与孔壁共用同一批点
+  function holedFace(outerRing, outerIds, holesRings, pool, z, flip){
+    var rs=[ensureCCW(outerRing)];
+    holesRings.forEach(function(r){ rs.push(r.slice().reverse()); });   // 字形翻向: 字外轮廓成孔, 字腔成岛
+    var gs=groupRings(rs);
+    gs.forEach(function(g){
+      var rings=[ensureCCW(g.outer)].concat(g.holes.map(ensureCW)), ids=[];
+      rings.forEach(function(r){ r.forEach(function(pt){ ids.push(pool(pt[0],pt[1])); }); });
+      if(g.outer===rs[0] && outerIds){                                    // 主外环必须用已有顶点
+        var ccw=ensureCCW(outerRing), same=(ccw===outerRing);
+        for(var q=0;q<ccw.length;q++) ids[q]= same? outerIds[q] : outerIds[outerRing.length-1-q];
+      }
+      addFace(m, ids, safeTriangulate(rings), flip);
+    });
+  }
+  // 字形各环的竖直侧壁 zLo -> zHi, 法线朝向字形内部的空腔
+  function glyphWalls(solid, poolLo, poolHi){
+    solid.forEach(function(r){
+      var rr=r.slice().reverse(), lo=[], hi=[];                              // 与 holedFace 里的绕向一致
+      rr.forEach(function(pt){ lo.push(poolLo(pt[0],pt[1])); hi.push(poolHi(pt[0],pt[1])); });
+      addWallIds(m, lo, hi);
+    });
+  }
+
+  /* ① 底面 z=0, 法线 -Z (镂空字会在这里开孔) */
+  var thruAll=[];
+  if(lblMode==='through') Object.keys(lblSolid).forEach(function(k2){ thruAll=thruAll.concat(lblSolid[k2]); });
+  if(thruAll.length) holedFace(outer, oB, thruAll, p0, 0, true);
+  else fanFace(m, outer, oB, 0, true);
   /* ② 外壁 0 -> H */
   addWallIds(m, oB, oT);
   /* ③a 外圈环带 (外轮廓 <-> 内框), 极角归并, 不用 earcut */
@@ -8859,12 +8946,35 @@ function buildBin(P){
       ct.push(pH(ring[t][0],ring[t][1]));       // 与栅格共用顶点
     }
     addWallIds(m, cb, ct);
-    fanFace(m, ring, cb, bt, true);
+    if(lblSolid[ci] && lblMode!=='raised'){
+      var ringCCW=ring.slice().reverse(), cbCCW=cb.slice().reverse();
+      holedFace(ringCCW, cbCCW, lblSolid[ci], pB, bt, false);          // 格底开字形孔, 法线 +Z
+      if(lblMode==='through') glyphWalls(lblSolid[ci], p0, pB);        // 穿到 z=0
+      else {
+        var zLo=bt-lblDepth, pL=makePool(m, zLo);
+        glyphWalls(lblSolid[ci], pL, pB);                               // 嵌入坑壁
+        var gsI=groupRings(lblSolid[ci]);
+        gsI.forEach(function(g){
+          var rings=[ensureCCW(g.outer)].concat(g.holes.map(ensureCW)), ids=[];
+          rings.forEach(function(r){ r.forEach(function(pt){ ids.push(pL(pt[0],pt[1])); }); });
+          addFace(m, ids, safeTriangulate(rings), false);               // 坑底, 法线 +Z
+        });
+      }
+    } else fanFace(m, ring, cb, bt, true);
   }
   if(wall<0.8) warn.push('壁厚 '+wall+'mm 不足 2 圈 0.4 喷嘴壁宽，打印可能偏脆。');
   if(nRound && lastDepth < P.ballD*0.3) warn.push('孔深 '+lastDepth.toFixed(1)+'mm 不到球径 30%，钢球容易滚出来。');
-  return {parts:[{name:'bin', mesh:m, slot:1, color:P.c1}], warnings:warn, errors:err,
-          info:{cells:rects.length, cw:cc.cw, ch:cc.ch, rounds:nRound, holeD:holeR*2, topD:lastTopD, depth:lastDepth}, size:[L,W,H]};
+  /* 格底文字零件: 凸起 = bt -> bt+高; 嵌入 = 坑底 -> bt (与格底齐平); 镂空没有零件 */
+  var tm=new Mesh();
+  if(lblMode!=='through') Object.keys(lblSolid).forEach(function(k3){
+    var gsT=groupRings(lblSolid[k3]), z0=lblMode==='inlay'? bt-lblDepth : bt, z1=lblMode==='inlay'? bt : bt+P.lblEmb;
+    for(var gi=0; gi<gsT.length; gi++) extrudeGroup(tm, gsT[gi].outer, gsT[gi].holes, z0, z1);
+  });
+  if(nLbl && lblMode==='raised' && P.lblEmb > H-bt) warn.push('文字凸起 '+P.lblEmb+'mm 高过格子深度，会冒出盒口。');
+  var partsOut=[{name:'bin', mesh:m, slot:1, color:P.c1}];
+  if(tm.nt()>0) partsOut.push({name:'floor text', mesh:tm, slot:P.lblSlot2?2:1, color:P.lblSlot2?P.c2:P.c1});
+  return {parts:partsOut, warnings:warn, errors:err,
+          info:{cells:rects.length, cw:cc.cw, ch:cc.ch, rounds:nRound, holeD:holeR*2, topD:lastTopD, depth:lastDepth, labels:nLbl}, size:[L,W,H]};
 }
 </script>
 <script>
@@ -9144,7 +9254,7 @@ function showModel(model){
 <script>
 "use strict";
 /* ================================================== UI 状态与装配 */
-var UI = { tab:'plate', fonts:{}, fontSel:null, merges:[], rounds:[], sel:null, model:null, last:null };
+var UI = { tab:'plate', fonts:{}, fontSel:null, merges:[], rounds:[], labels:[], sel:null, model:null, last:null };
 function $(id){ return document.getElementById(id); }
 function num(id){ var v=parseFloat($(id).value); return isFinite(v)?v:0; }
 
@@ -9154,7 +9264,7 @@ function b64ToBuf(b64){
   for(var i=0;i<n;i++) u[i]=bin.charCodeAt(i);
   return u.buffer;
 }
-function fontSelects(){ return [$('p_font'), $('k_font')]; }
+function fontSelects(){ return [$('p_font'), $('k_font'), $('b_font')]; }
 function addFontOption(val,label){
   fontSelects().forEach(function(sel){
     var o=document.createElement('option'); o.value=val; o.textContent=label; sel.appendChild(o);
@@ -9200,6 +9310,9 @@ function binParams(){
            cols:Math.max(1,Math.round(num('b_cols'))), rows:Math.max(1,Math.round(num('b_rows'))),
            merges:UI.merges.slice(), rounds:(UI.rounds||[]).slice(),
            ballD:num('b_ballD'), ballClr:num('b_ballClr'), ballSeat:$('b_ballSeat').value, ballDepth:num('b_ballDepth'),
+           labels:(UI.labels||[]).slice(), lblSize:num('b_lblSize'), lblEmb:num('b_lblEmb'),
+           lblMode:$('b_lblMode').value, lblBridge:num('b_lblBridge'),
+           lblSlot2:$('b_lblSlot2').checked, font:UI.fontSel,
            c1:$('b_c1t').value, c2:$('b_c2t').value };
 }
 /* 叠色层预设: [外扩mm, 厚度mm, 颜色] 从下往上 */
@@ -9252,7 +9365,7 @@ function setParams(tab, o){
     plate:{style:'p_style',bridge:'p_bridge',len:'p_len',wid:'p_wid',thk:'p_thk',radius:'p_rad',text:'p_text',emb:'p_emb',size:'p_size',
            leading:'p_lead',track:'p_track',margin:'p_marg',align:'p_align',c1:'p_c1t',c2:'p_c2t',fname:'fname'},
     bin:  {len:'b_len',wid:'b_wid',hgt:'b_hgt',wall:'b_wall',bot:'b_bot',radius:'b_rad',
-           cols:'b_cols',rows:'b_rows',ballD:'b_ballD',ballClr:'b_ballClr',ballSeat:'b_ballSeat',ballDepth:'b_ballDepth',c1:'b_c1t',c2:'b_c2t',fname:'fname'},
+           cols:'b_cols',rows:'b_rows',ballD:'b_ballD',ballClr:'b_ballClr',ballSeat:'b_ballSeat',ballDepth:'b_ballDepth',lblSize:'b_lblSize',lblEmb:'b_lblEmb',lblMode:'b_lblMode',lblBridge:'b_lblBridge',c1:'b_c1t',c2:'b_c2t',fname:'fname'},
     key:  {text:'k_text',size:'k_size',track:'k_track',slant:'k_slant',
            ringD:'k_ringD',ringHole:'k_ringHole',ringInset:'k_ringInset',side:'k_side',fname:'fname'}
   };
@@ -9260,6 +9373,8 @@ function setParams(tab, o){
   for(var k in o){
     if(k==='merges'){ UI.merges=o[k].slice(); continue; }
     if(k==='rounds'){ UI.rounds=o[k].slice(); continue; }
+    if(k==='labels'){ UI.labels=o[k].slice(); continue; }
+    if(k==='lblSlot2'){ $('b_lblSlot2').checked=!!o[k]; continue; }
     if(k==='preset'){ applyPreset(o[k]); continue; }
     if(k==='layers'){ for(var li=0;li<MAXL;li++){ var L=o[k][li];
         $('kl_on'+li).checked=!!L; if(L){ $('kl_o'+li).value=L[0]; $('kl_h'+li).value=L[1];
@@ -9319,8 +9434,15 @@ function syncPlateStyle(){
   $('p_style_hint').style.display = st?'':'none';
   $('p_emb').closest('.row').style.display = st?'none':'';
 }
+function syncLblMode(){
+  var md=$('b_lblMode').value;
+  $('b_lblEmbRow').style.display = md==='through'?'none':'';
+  $('b_lblEmbLabel').textContent = md==='inlay'?'嵌入深度':'凸起高度';
+  $('b_lblBridgeRow').style.display = md==='through'?'':'none';
+}
 function rebuild(){
   if($('p_style')) syncPlateStyle();
+  if($('b_lblMode')) syncLblMode();
   var t0=performance.now();
   var tab=UI.tab, P = tab==='plate'? plateParams() : (tab==='bin'? binParams() : keyParams());
   var vd = validate(P, tab);
@@ -9375,7 +9497,7 @@ function rebuild(){
             (model.info.pieces===1? '<b>1 (一体)</b>' : '<b style="color:#ffb648">'+model.info.pieces+'</b>')+'<br>';
   if(tab==='bin' && model.info.cells!==undefined)
     html += '格数 '+model.info.cells+' · 基本格净 '+model.info.cw.toFixed(1)+'×'+model.info.ch.toFixed(1)+'mm'+
-      (model.info.rounds? ' · 圆孔 '+model.info.rounds+' 个 球⌀'+model.info.holeD.toFixed(2)+' 口⌀'+model.info.topD.toFixed(2)+' 深'+model.info.depth.toFixed(1)+(binParams().ballSeat==='sphere'?' 球面':' 平底'):'')+'<br>';
+      (model.info.rounds? ' · 圆孔 '+model.info.rounds+' 个 球⌀'+model.info.holeD.toFixed(2)+' 口⌀'+model.info.topD.toFixed(2)+' 深'+model.info.depth.toFixed(1)+(binParams().ballSeat==='sphere'?' 球面':' 平底'):'')+(model.info.labels?' · 格底文字 '+model.info.labels+' 处（'+({raised:'凸起',inlay:'嵌入',through:'镂空'})[binParams().lblMode]+'）':'')+'<br>';
   if(tab==='key') html += model.parts.map(function(q){return '槽'+q.slot+' '+normHex(q.color);}).join(' · ')+' · 全 PLA';
   else html += '槽1 '+normHex(P.c1)+' · 槽2 '+normHex(P.c2)+' · PLA/PLA';
   $('stat').innerHTML=html;
@@ -9458,7 +9580,15 @@ function liveBlocks(){
 }
 function pruneRounds(){
   var bl=liveBlocks();
+  UI.labels=(UI.labels||[]).filter(function(z){ return bl.some(function(b){return b.r0===z.r0&&b.c0===z.c0&&b.r1===z.r1&&b.c1===z.c1;}); });
   UI.rounds=(UI.rounds||[]).filter(function(z){ return bl.some(function(b){return b.r0===z.r0&&b.c0===z.c0&&b.r1===z.r1&&b.c1===z.c1;}); });
+}
+function setLabel(on){
+  var txt=$('b_lblText').value;
+  var hit=liveBlocks().filter(function(b){ return !UI.sel || rectHit(b,UI.sel); });
+  UI.labels=(UI.labels||[]).filter(function(z){ return !hit.some(function(b){return b.r0===z.r0&&b.c0===z.c0&&b.r1===z.r1&&b.c1===z.c1;}); });
+  if(on && txt.trim()) hit.forEach(function(b){ UI.labels.push({r0:b.r0,c0:b.c0,r1:b.r1,c1:b.c1,text:txt}); });
+  drawGrid(); rebuild();
 }
 function setRound(on){
   if(!UI.sel) return;
@@ -9512,7 +9642,8 @@ function drawGrid(){
       for(var pi=0;pi<n;pi++){
         var e=d.cloneNode(false);
         e.style.left=(q.c0*cw+2+pi*(pw+gap))+'px'; e.style.width=pw+'px';
-        e.innerHTML='<span class="gdim">'+(+sw.toFixed(1))+'<i>×</i>'+(+ih.toFixed(1))+'</span><span class="gspan">均分 '+(pi+1)+'/'+n+'</span>';
+        var lb2=(UI.labels||[]).filter(function(z){return z.r0===q.r0&&z.c0===q.c0&&z.r1===q.r1&&z.c1===q.c1;})[0];
+        e.innerHTML='<span class="gdim">'+(+sw.toFixed(1))+'<i>×</i>'+(+ih.toFixed(1))+'</span><span class="gspan">均分 '+(pi+1)+'/'+n+'</span>'+(lb2?'<span class="glbl">「'+xesc(lb2.text.split('\n')[0].slice(0,10))+'」</span>':'');
         e.title='内腔 '+sw.toFixed(1)+' × '+ih.toFixed(1)+' mm（'+nc+'×'+nr+' 合并后均分 '+n+' 格）';
         e.dataset.r=q.r0; e.dataset.c=q.c0; e.dataset.r1=q.r1; e.dataset.c1=q.c1;
         box.appendChild(e);
@@ -9527,8 +9658,10 @@ function drawGrid(){
       d.title='圆孔 ⌀'+hd.toFixed(2)+' mm（格子 '+iw.toFixed(1)+'×'+ih.toFixed(1)+'）';
       box.appendChild(d); continue;
     }
+    var lb=(UI.labels||[]).filter(function(z){return z.r0===q.r0&&z.c0===q.c0&&z.r1===q.r1&&z.c1===q.c1;})[0];
     d.innerHTML = (mcw>0&&mch>0)
       ? '<span class="gdim">'+(+iw.toFixed(1))+'<i>×</i>'+(+ih.toFixed(1))+'</span>'+((nc>1||nr>1)?'<span class="gspan">'+nc+'×'+nr+' 合并</span>':'')
+        +(lb?'<span class="glbl">「'+xesc(lb.text.split('\n')[0].slice(0,10))+'」</span>':'')
       : '';
     d.title='内腔 '+iw.toFixed(1)+' × '+ih.toFixed(1)+' mm';
     d.dataset.r=q.r0; d.dataset.c=q.c0; d.dataset.r1=q.r1; d.dataset.c1=q.c1;
@@ -9644,6 +9777,7 @@ function boot(){
   });
   $('p_upload').addEventListener('click',function(){ $('p_file').click(); });
   $('k_upload').addEventListener('click',function(){ $('p_file').click(); });
+  $('b_upload').addEventListener('click',function(){ $('p_file').click(); });
   $('p_file').addEventListener('change',function(e){
     var f=e.target.files && e.target.files[0]; if(!f) return;
     var rd=new FileReader();
@@ -9662,9 +9796,14 @@ function boot(){
 
   $('b_merge').addEventListener('click', doMerge);
   $('b_split').addEventListener('click', doSplit);
-  $('b_clear').addEventListener('click', function(){ UI.merges=[]; UI.rounds=[]; UI.sel=null; drawGrid(); rebuild(); });
+  $('b_clear').addEventListener('click', function(){ UI.merges=[]; UI.rounds=[]; UI.labels=[]; UI.sel=null; drawGrid(); rebuild(); });
   $('b_round').addEventListener('click', function(){ setRound(true); });
   $('b_even').addEventListener('click', doMergeEven);
+  $('b_lblAdd').addEventListener('click', function(){ setLabel(true); });
+  $('b_lblDel').addEventListener('click', function(){ setLabel(false); });
+  ['b_lblEmb','b_lblSize','b_lblBridge'].forEach(function(id){ $(id).addEventListener('input', scheduleRebuild); });
+  $('b_lblMode').addEventListener('change', scheduleRebuild);
+  $('b_lblSlot2').addEventListener('change', scheduleRebuild);
   $('b_unround').addEventListener('click', function(){ setRound(false); });
   $('b_ballSeat').addEventListener('change', scheduleRebuild);
   ['b_ballD','b_ballClr','b_ballDepth'].forEach(function(id){
@@ -9695,7 +9834,7 @@ function saveState(){
       v[el.id] = el.type==='checkbox' ? el.checked : el.value;
     });
     var fk=null; for(var k in UI.fonts) if(UI.fonts[k]===UI.fontSel && k[0]==='b') fk=k;
-    localStorage.setItem(STATE_KEY, JSON.stringify({v:v, tab:UI.tab, merges:UI.merges, rounds:UI.rounds||[], font:fk}));
+    localStorage.setItem(STATE_KEY, JSON.stringify({v:v, tab:UI.tab, merges:UI.merges, rounds:UI.rounds||[], labels:UI.labels||[], font:fk}));
   }catch(e){}
 }
 function loadState(){
@@ -9703,10 +9842,10 @@ function loadState(){
   try{ st=JSON.parse(localStorage.getItem(STATE_KEY)||'null'); }catch(e){}
   if(!st || !st.v) return;
   Object.keys(st.v).forEach(function(id){
-    var el=document.getElementById(id); if(!el || id==='p_font' || id==='k_font') return;
+    var el=document.getElementById(id); if(!el || id==='p_font' || id==='k_font' || id==='b_font') return;
     if(el.type==='checkbox') el.checked=!!st.v[id]; else el.value=st.v[id];
   });
-  UI.merges=st.merges||[]; UI.rounds=st.rounds||[];
+  UI.merges=st.merges||[]; UI.rounds=st.rounds||[]; UI.labels=st.labels||[];
   if(st.font) pickFont(st.font);
   if(typeof syncLayerRows==='function') syncLayerRows();
   if(st.tab) switchTab(st.tab);
