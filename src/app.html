@@ -4,18 +4,40 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>名牌 &amp; 收纳盒 参数化生成器 · Bambu 3MF</title>
+<script>
+(function(){ var t=null; try{ t=localStorage.getItem('3dgen-theme'); }catch(e){}
+  if(t!=='light' && t!=='dark') t=(window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark';
+  document.documentElement.dataset.theme=t; })();
+</script>
 <style>
 :root{
   --bg:#14161a; --panel:#1c1f26; --panel2:#232733; --line:#2f3542; --line2:#3d4557;
   --fg:#e8ebf0; --dim:#98a2b5; --acc:#5aa9ff; --acc2:#2b7fd4;
   --ok:#3ddc84; --warn:#ffb648; --err:#ff5f56;
+  --mute:#6b7688; --field:#11141a; --fs:#1a1d24; --view:#0f1115; --foot:#171a20; --thumb:#39404f;
+  --hov:#fff; --wtx:#ffca77; --etx:#ff8f88; --ovlbg:rgba(18,21,27,.82); --busybg:rgba(15,17,21,.55);
+  --cell:#252b38; --cellb:#454e63; --celltx:#7d8798; --gdim:#c3ccda; --glbl:#ffd27a; --cellhov:#5f6a80;
+  --rd:#2a3546; --rdtx:#9fd0ff; --mg:#2e3a4d; --mgb:#5c6880; --mgtx:#aab6c8;
+  --sel:rgba(90,169,255,.3); --sel2:rgba(90,169,255,.34); --seltx:#dceaff; --seldim:#fff; --mgseltx:#eaf3ff;
+  color-scheme:dark;
+}
+:root[data-theme="light"]{
+  --bg:#eef1f5; --panel:#ffffff; --panel2:#f0f2f6; --line:#dde2ea; --line2:#c6cdd8;
+  --fg:#1b2230; --dim:#566174; --acc:#1f7ae0; --acc2:#165fb3;
+  --ok:#17914c; --warn:#b86e00; --err:#d23a32;
+  --mute:#8a93a3; --field:#ffffff; --fs:#f8f9fb; --view:#e7ebf1; --foot:#f6f7fa; --thumb:#c3cad5;
+  --hov:#0b1220; --wtx:#8a5200; --etx:#b8302a; --ovlbg:rgba(255,255,255,.86); --busybg:rgba(235,239,245,.6);
+  --cell:#eef1f6; --cellb:#c3cad6; --celltx:#6b7485; --gdim:#273041; --glbl:#a65f00; --cellhov:#8f9bb0;
+  --rd:#e2eeff; --rdtx:#1f6fd1; --mg:#dfe6f0; --mgb:#9aa6b8; --mgtx:#3d4757;
+  --sel:rgba(31,122,224,.2); --sel2:rgba(31,122,224,.26); --seltx:#0b3d75; --seldim:#0b3d75; --mgseltx:#0b3d75;
+  color-scheme:light;
 }
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--fg);font:13px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",Helvetica,Arial,sans-serif;overflow:hidden}
 #app{display:flex;height:100vh;width:100vw}
 #panel{width:358px;min-width:358px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;height:100%}
-#view{flex:1;position:relative;min-width:0;background:#0f1115}
+#view{flex:1;position:relative;min-width:0;background:var(--view)}
 #cv{display:block;width:100%;height:100%}
 h1{font-size:14px;margin:0;padding:13px 14px 11px;border-bottom:1px solid var(--line);letter-spacing:.3px;font-weight:600;display:flex;align-items:center;gap:8px}
 h1 .dot{width:8px;height:8px;border-radius:50%;background:var(--acc);flex:none}
@@ -25,25 +47,25 @@ h1 small{margin-left:auto;color:var(--dim);font-weight:400;font-size:11px}
 .tab.on{background:var(--panel);color:var(--fg);border-color:var(--line2);box-shadow:inset 0 2px 0 var(--acc)}
 #scroll{flex:1;overflow-y:auto;padding:12px;border-top:1px solid var(--line);margin-top:-1px}
 #scroll::-webkit-scrollbar{width:9px}
-#scroll::-webkit-scrollbar-thumb{background:#39404f;border-radius:5px}
-fieldset{border:1px solid var(--line);border-radius:8px;margin:0 0 11px;padding:9px 11px 11px;background:#1a1d24}
+#scroll::-webkit-scrollbar-thumb{background:var(--thumb);border-radius:5px}
+fieldset{min-width:0;border:1px solid var(--line);border-radius:8px;margin:0 0 11px;padding:9px 11px 11px;background:var(--fs)}
 legend{padding:0 6px;color:var(--acc);font-size:11px;font-weight:600;letter-spacing:.5px}
 .row{display:flex;align-items:center;gap:8px;margin:7px 0}
 .row label{width:96px;flex:none;color:var(--dim);font-size:12px}
-.row .u{color:#6b7688;font-size:11px;width:22px;flex:none}
-input[type=number],input[type=text],select,textarea{background:#11141a;border:1px solid var(--line2);color:var(--fg);border-radius:6px;padding:6px 8px;font:12px/1.4 inherit;width:100%;min-width:0}
+.row .u{color:var(--mute);font-size:11px;width:22px;flex:none}
+input[type=number],input[type=text],select,textarea{background:var(--field);border:1px solid var(--line2);color:var(--fg);border-radius:6px;padding:6px 8px;font:12px/1.4 inherit;width:100%;min-width:0}
 input[type=number]:focus,input[type=text]:focus,select:focus,textarea:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 2px rgba(90,169,255,.16)}
 textarea{resize:vertical;min-height:62px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 input[type=range]{width:100%;accent-color:var(--acc)}
-input[type=color]{width:40px;height:28px;padding:1px;border:1px solid var(--line2);border-radius:6px;background:#11141a;cursor:pointer;flex:none}
+input[type=color]{width:40px;height:28px;padding:1px;border:1px solid var(--line2);border-radius:6px;background:var(--field);cursor:pointer;flex:none}
 button{background:var(--panel2);border:1px solid var(--line2);color:var(--fg);border-radius:6px;padding:7px 11px;cursor:pointer;font:12px/1.2 inherit}
-button:hover{border-color:var(--acc);color:#fff}
+button:hover{border-color:var(--acc);color:var(--hov)}
 button:active{transform:translateY(1px)}
 button:disabled{opacity:.42;cursor:not-allowed;transform:none}
 button.pri{background:linear-gradient(180deg,var(--acc),var(--acc2));border-color:var(--acc2);color:#fff;font-weight:600;font-size:13px;padding:11px}
 .btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
-.hint{color:#6b7688;font-size:11px;line-height:1.55;margin:6px 0 0}
-#foot{border-top:1px solid var(--line);padding:11px 12px;background:#171a20}
+.hint{color:var(--mute);font-size:11px;line-height:1.55;margin:6px 0 0}
+#foot{border-top:1px solid var(--line);padding:11px 12px;background:var(--foot)}
 #stat{font:11px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--dim);margin-bottom:9px;max-height:150px;overflow-y:auto}
 #stat b{color:var(--fg);font-weight:600}
 .badge{display:inline-block;padding:1px 7px;border-radius:4px;font-weight:700;font-size:10px;letter-spacing:.4px}
@@ -51,37 +73,42 @@ button.pri{background:linear-gradient(180deg,var(--acc),var(--acc2));border-colo
 .b-err{background:rgba(255,95,86,.15);color:var(--err);border:1px solid rgba(255,95,86,.4)}
 .b-warn{background:rgba(255,182,72,.15);color:var(--warn);border:1px solid rgba(255,182,72,.4)}
 .msg{padding:7px 9px;border-radius:6px;margin:7px 0 0;font-size:11.5px;line-height:1.5}
-.m-warn{background:rgba(255,182,72,.1);border:1px solid rgba(255,182,72,.3);color:#ffca77}
-.m-err{background:rgba(255,95,86,.1);border:1px solid rgba(255,95,86,.32);color:#ff8f88}
+.m-warn{background:rgba(255,182,72,.1);border:1px solid rgba(255,182,72,.3);color:var(--wtx)}
+.m-err{background:rgba(255,95,86,.1);border:1px solid rgba(255,95,86,.32);color:var(--etx)}
 #grid{margin-top:9px;-webkit-user-select:none;user-select:none}
-#gridWrap{background:#11141a;border:1px solid var(--line2);border-radius:7px;padding:9px;display:flex;justify-content:center}
-.gcell{position:absolute;border:1px solid #454e63;border-radius:3px;background:#252b38;display:flex;align-items:center;justify-content:center;font-size:10px;color:#7d8798;cursor:pointer;transition:background .08s,border-color .08s}
+#gridWrap{background:var(--field);border:1px solid var(--line2);border-radius:7px;padding:9px;display:flex;justify-content:center}
+.gcell{position:absolute;border:1px solid var(--cellb);border-radius:3px;background:var(--cell);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--celltx);cursor:pointer;transition:background .08s,border-color .08s}
 .gcell{flex-direction:column;gap:1px;line-height:1.15;text-align:center;overflow:hidden}
-.gdim{font:600 10.5px ui-monospace,Menlo,monospace;color:#c3ccda;white-space:nowrap}
-.gdim i{font-style:normal;color:#6b7688;margin:0 1px}
-.gspan{font-size:9px;color:#7d8798}
-.glbl{font-size:9.5px;color:#ffd27a;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.gcell.rd{background:#2a3546;border-color:#5aa9ff}
-.gcell.rd .gdim{color:#9fd0ff}
-.gcell.sel .gdim{color:#fff}
-.gcell:hover{border-color:#5f6a80}
-.gcell.sel{background:rgba(90,169,255,.3);border-color:var(--acc);color:#dceaff}
-.gcell.mg{background:#2e3a4d;border-color:#5c6880;color:#aab6c8;font-weight:600}
-.gcell.mg.sel{background:rgba(90,169,255,.34);border-color:var(--acc);color:#eaf3ff}
+.gdim{font:600 10.5px ui-monospace,Menlo,monospace;color:var(--gdim);white-space:nowrap}
+.gdim i{font-style:normal;color:var(--mute);margin:0 1px}
+.gspan{font-size:9px;color:var(--celltx)}
+.glbl{font-size:9.5px;color:var(--glbl);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gcell.rd{background:var(--rd);border-color:var(--acc)}
+.gcell.rd .gdim{color:var(--rdtx)}
+.gcell.sel .gdim{color:var(--seldim)}
+.gcell:hover{border-color:var(--cellhov)}
+.gcell.sel{background:var(--sel);border-color:var(--acc);color:var(--seltx)}
+.gcell.mg{background:var(--mg);border-color:var(--mgb);color:var(--mgtx);font-weight:600}
+.gcell.mg.sel{background:var(--sel2);border-color:var(--acc);color:var(--mgseltx)}
 #gridBox{position:relative}
-.ovl{position:absolute;left:12px;bottom:12px;background:rgba(18,21,27,.82);border:1px solid var(--line);border-radius:7px;padding:7px 11px;font:11px/1.6 ui-monospace,Menlo,monospace;color:var(--dim);backdrop-filter:blur(6px);pointer-events:none}
+.ovl{position:absolute;left:12px;bottom:12px;background:var(--ovlbg);border:1px solid var(--line);border-radius:7px;padding:7px 11px;font:11px/1.6 ui-monospace,Menlo,monospace;color:var(--dim);backdrop-filter:blur(6px);pointer-events:none}
 .ovl b{color:var(--fg)}
-#busy{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(15,17,21,.55);color:var(--acc);font-size:13px;backdrop-filter:blur(1px)}
+#busy{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:var(--busybg);color:var(--acc);font-size:13px;backdrop-filter:blur(1px)}
 #busy.on{display:flex}
 .sw{display:flex;align-items:center;gap:7px}
 .sw input[type=text]{width:80px;font-family:ui-monospace,Menlo,monospace;text-transform:uppercase}
 .mini{font-size:11px;padding:5px 9px}
 .lyh,.lyr{display:grid;grid-template-columns:22px 1fr 64px 64px;gap:6px;align-items:center}
-.lyh{color:#6b7688;font-size:10.5px;margin:2px 0 3px}
+.lyh{color:var(--mute);font-size:10.5px;margin:2px 0 3px}
 .lyr{margin:5px 0}
 .lyr .sw input[type=text]{width:74px}
 .lyr.off{opacity:.42}
 a{color:var(--acc)}
+#topbar{position:absolute;top:12px;right:12px;display:flex;gap:6px;z-index:5}
+#topbar button{display:flex;align-items:center;justify-content:center;gap:5px;min-width:34px;height:32px;padding:0 10px;background:var(--ovlbg);border-color:var(--line);backdrop-filter:blur(6px);font-size:12px;font-weight:600}
+#topbar button svg{width:16px;height:16px;flex:none}
+#topbar .lg span{opacity:.45}
+#topbar .lg span.on{opacity:1;color:var(--acc)}
 </style>
 </head>
 <body>
@@ -249,6 +276,10 @@ Appearance inspection</textarea>
     <canvas id="cv"></canvas>
     <div class="ovl" id="ovl">左键旋转 · 滚轮缩放 · 右键/Shift 平移</div>
     <div id="busy">生成中…</div>
+    <div id="topbar">
+      <button id="themeBtn" title="深色 / 浅色"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path id="themeIco" d=""/></svg></button>
+      <button id="langBtn" class="lg" title="中文 / English"><span data-l="zh">中</span><span>/</span><span data-l="en">EN</span></button>
+    </div>
   </div>
 </div>
 
@@ -1519,7 +1550,7 @@ function initView(){
   V.renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
   V.renderer.outputEncoding=THREE.sRGBEncoding;
   V.scene=new THREE.Scene();
-  V.scene.background=new THREE.Color(0x0f1115);
+  V.scene.background=new THREE.Color();
   V.camera=new THREE.PerspectiveCamera(42,1,0.5,4000);
   V.target=new THREE.Vector3(0,0,0);
   V.sph={r:340,theta:-Math.PI/2.35,phi:0.95};
@@ -1529,16 +1560,15 @@ function initView(){
   var d2=new THREE.DirectionalLight(0xbdd4ff,0.35); d2.position.set(-220,-160,140); V.scene.add(d2);
 
   // 打印床
-  var g=new THREE.GridHelper(BED,16,0x39445c,0x232a38);
-  g.rotation.x=Math.PI/2; g.position.z=-0.02; V.scene.add(g);
   var bed=new THREE.LineSegments(
     new THREE.EdgesGeometry(new THREE.PlaneGeometry(BED,BED)),
-    new THREE.LineBasicMaterial({color:0x4a5876}));
-  V.scene.add(bed);
+    new THREE.LineBasicMaterial());
+  V.scene.add(bed); V.bed=bed;
   var warn=new THREE.LineSegments(
     new THREE.EdgesGeometry(new THREE.PlaneGeometry(BED_WARN,BED_WARN)),
-    new THREE.LineDashedMaterial({color:0x6a5a30,dashSize:4,gapSize:4}));
-  warn.computeLineDistances(); V.scene.add(warn);
+    new THREE.LineDashedMaterial({dashSize:4,gapSize:4}));
+  warn.computeLineDistances(); V.scene.add(warn); V.warnLine=warn;
+  themeView();
 
   V.group=new THREE.Group(); V.scene.add(V.group);
   bindOrbit(cv);
@@ -1706,7 +1736,7 @@ function drawLayers(){
   for(var i=0;i<MAXL;i++){
     var row=document.createElement('div'); row.className='lyr'; row.id='kl'+i;
     row.innerHTML='<input type="checkbox" id="kl_on'+i+'" style="width:auto" title="启用第 '+(i+1)+' 层">'+
-      '<div class="sw"><b style="color:#6b7688;font-size:11px;width:12px">'+(i+1)+'</b>'+
+      '<div class="sw"><b style="color:var(--mute);font-size:11px;width:12px">'+(i+1)+'</b>'+
       '<input type="color" id="kl_c'+i+'"><input type="text" id="kl_ct'+i+'"></div>'+
       '<input type="number" id="kl_o'+i+'" min="0" max="20" step="0.2" title="外扩 mm">'+
       '<input type="number" id="kl_h'+i+'" min="0.2" max="20" step="0.2" title="厚度 mm">';
@@ -1790,6 +1820,7 @@ function validate(P, tab){
   else if(L>BED_WARN||W>BED_WARN) w.push('外形 '+L+'×'+W+'mm 超过 '+BED_WARN+'mm 保守上限：贴近 A1 幅面边界，务必在 Bambu Studio 里确认摆放未压边。');
   if(tab==='plate'){
     if(P.thk<0.2) e.push('板厚至少 0.2mm。');
+    else if(P.style==='inlay' && P.thk<0.6) e.push('双色嵌入要求板厚至少 0.6mm（嵌入 0.2 + 下面留 0.4）。');
     if(P.emb<0.1) e.push('字凸起至少 0.1mm。');
     if(P.emb<0.2) w.push('字凸起 '+P.emb+'mm 小于一层高(0.2)，可能印不出来。');
   } else {
@@ -1876,7 +1907,7 @@ function rebuild(){
             (model.info.scale<0.999? ' · 缩放 '+(model.info.scale*100).toFixed(0)+'%':'')+'<br>';
   if(tab==='key' && model.info.w!==undefined)
     html += model.info.layers+' 层叠色 · 外形 '+model.info.w.toFixed(1)+'×'+model.info.h.toFixed(1)+'mm · 连通块 '+
-            (model.info.pieces===1? '<b>1 (一体)</b>' : '<b style="color:#ffb648">'+model.info.pieces+'</b>')+'<br>';
+            (model.info.pieces===1? '<b>1 (一体)</b>' : '<b style="color:var(--warn)">'+model.info.pieces+'</b>')+'<br>';
   if(tab==='bin' && model.info.cells!==undefined)
     html += '格数 '+model.info.cells+' · 基本格净 '+model.info.cw.toFixed(1)+'×'+model.info.ch.toFixed(1)+'mm'+
       (model.info.rounds? ' · 圆孔 '+model.info.rounds+' 个 球⌀'+model.info.holeD.toFixed(2)+' 口⌀'+model.info.topD.toFixed(2)+' 深'+model.info.depth.toFixed(1)+(binParams().ballSeat==='sphere'?' 球面':' 平底'):'')+(model.info.labels?' · 格底文字 '+model.info.labels+' 处（'+({raised:'凸起',inlay:'嵌入',through:'镂空'})[binParams().lblMode]+'）':'')+'<br>';
@@ -1988,7 +2019,7 @@ function drawGrid(){
   clampMerges(); pruneRounds();
   var rows=Math.max(1,Math.round(num('b_rows'))), cols=Math.max(1,Math.round(num('b_cols')));
   var box=$('gridBox');
-  var maxW=300, maxH=210;
+  var maxW=276, maxH=210;                   // 面板内可用宽度 (358 侧栏扣掉内边距)
   var L=num('b_len')||1, W=num('b_wid')||1;
   var sc=Math.min(maxW/L, maxH/W);
   var bw=L*sc, bh=W*sc;
@@ -2122,6 +2153,7 @@ function pairColor(pick, txt){
 }
 function boot(){
   initView();
+  initPrefs();
   initFonts();
 
   var ids=['p_style','p_bridge','p_len','p_wid','p_thk','p_rad','p_text','p_emb','p_size','p_lead','p_track','p_marg','p_align','p_fit',
@@ -2202,6 +2234,234 @@ function boot(){
   document.getElementById('panel').addEventListener('input', saveStateSoon);
   document.getElementById('panel').addEventListener('change', saveStateSoon);
   document.getElementById('panel').addEventListener('click', saveStateSoon);
+}
+
+/* 深/浅色: 打印床网格是顶点色, 换主题时直接重建 */
+var VIEW_THEME={
+  dark: {bg:0x0f1115, g1:0x39445c, g2:0x232a38, bed:0x4a5876, warn:0x6a5a30},
+  light:{bg:0xe7ebf1, g1:0xa9b3c3, g2:0xd0d6df, bed:0x8592a8, warn:0xc49a3a}
+};
+function themeView(){
+  if(!V.scene) return;
+  var c=VIEW_THEME[document.documentElement.dataset.theme==='light'?'light':'dark'];
+  V.scene.background.setHex(c.bg);
+  if(V.grid){ V.scene.remove(V.grid); V.grid.geometry.dispose(); V.grid.material.dispose(); }
+  V.grid=new THREE.GridHelper(BED,16,c.g1,c.g2);
+  V.grid.rotation.x=Math.PI/2; V.grid.position.z=-0.02; V.scene.add(V.grid);
+  V.bed.material.color.setHex(c.bed); V.warnLine.material.color.setHex(c.warn);
+  if(typeof render==='function') render();
+}
+
+/* ===== 中 / EN: 页面按中文写, 切到英文时逐个文本节点翻译 (含之后动态生成的提示),
+   切回中文时原样还原。用户自己输入的内容 (文本框、格子标签) 不碰。 ===== */
+var I18N_EXACT={
+  '名牌 & 收纳盒 参数化生成器 · Bambu 3MF':'Nameplate & Bin Generator · Bambu 3MF',
+  '名牌 & 收纳盒生成器':'Nameplate & Bin Generator',
+  '名牌':'Nameplate','收纳盒':'Storage bin','名字挂件':'Name keychain',
+  '底板':'Plate','长 X':'Length X','宽 Y':'Width Y','板厚 Z':'Thickness Z','圆角':'Corner radius',
+  '文字':'Text','多行文字':'Text (multi-line)','风格':'Style',
+  '双色凸字':'Two-color raised','单色镂空（字穿透）':'Single-color stencil (cut through)',
+  '双色嵌入（字凹进去再填平）':'Two-color inlay (recessed & filled flush)',
+  '连接桥宽':'Bridge width',
+  '字整个挖穿、只用 1 号料。O / A / B / 8 等字母中间的"孤岛"会自动加一道竖向细桥连回底板，否则会掉出来。':
+    'Letters are cut all the way through, using filament 1 only. Islands inside O / A / B / 8 get a thin vertical bridge back to the plate so they don’t fall out.',
+  '字凸起':'Text height','嵌入深度':'Inlay depth','凸起高度':'Raise height',
+  '字号 em':'Font size (em)','行距 ×':'Line spacing ×','字间距':'Letter spacing','页边距':'Margin','对齐':'Align',
+  '居中':'Center','左':'Left','右':'Right','自动缩放':'Auto-fit','超出边距时整体缩小':'Shrink to fit margins',
+  '字体':'Font','内置/上传':'Built-in / upload','上传 .ttf / .otf …':'Upload .ttf / .otf …',
+  '内置为西文字体。需要中文/日文请上传字库（如 NotoSansSC-Bold.ttf），字形轮廓在本地解析，不联网。':
+    'Built-in fonts are Latin only. For Chinese/Japanese, upload a font (e.g. NotoSansSC-Bold.ttf). Outlines are parsed locally, nothing is uploaded.',
+  '颜色 · 双色':'Colors · two-color','底板 槽1':'Plate · slot 1','文字 槽2':'Text · slot 2',
+  '底板走 1 号槽、文字走 2 号槽，两部件几何不重叠、字底贴合板面。':
+    'Plate prints from slot 1, text from slot 2. The two parts don’t overlap; text sits right on the plate.',
+  '外框':'Outer box','高 Z':'Height Z','壁厚':'Wall','底厚':'Floor','分格':'Dividers','列数 X':'Columns X','行数 Y':'Rows Y',
+  '格子里的数字是该格':'Numbers in each cell are its ','内腔净尺寸':'inner clear size',
+  '（长×宽 mm，扣掉壁厚），改参数实时更新。下图点选或拖框选相邻若干格 →':
+    ' (L×W mm, walls excluded), updated live. Click or drag-select adjacent cells below →',
+  '合并':'Merge',
+  '，中间隔断消失，大小格混排。双击合并格可拆开。':' to remove the dividers between them and mix cell sizes. Double-click a merged cell to split it.',
+  '合并所选':'Merge selected','拆开所选':'Split selected','全部还原':'Reset all',
+  '所选合并后左右均分':'Merge selected, then split evenly into','成':'','格（宽度完全相等）':'cells (exactly equal width)',
+  '所选设为圆孔':'Make selected round','所选恢复方格':'Make selected square',
+  '圆孔直径':'Pocket diameter','孔底形状':'Pocket bottom','球面（贴合钢球）':'Spherical (fits a ball)','平底':'Flat',
+  '孔深':'Pocket depth','配合间隙':'Clearance',
+  '放钢球/轴承等圆形件：选中格子 →':'For balls, bearings and other round parts: select cells → ',
+  '，该格变成一个居中的圆形窝。实际孔径 = 直径 + 间隙（FDM 打出来的孔会偏小，0.3–0.5 比较稳）。孔深 = 顶面到孔最低点的距离（填 0 = 一直挖到底厚）。球面底 = 孔底是这个直径的球面；孔深小于半径时就是一个浅碗（球冠），口径会比直径小一点。':
+    '. Each becomes a centered round pocket. Actual hole = diameter + clearance (FDM holes print small; 0.3–0.5 is safe). Depth = top surface to the lowest point (0 = down to the floor). Spherical bottom = a sphere of this diameter; if depth is less than the radius it’s a shallow cap and the opening is a bit smaller than the diameter.',
+  '格底文字':'Cell floor text','比如：M3 螺丝':'e.g. M3 screws',
+  '给所选格加文字':'Add text to selected','清除所选格文字':'Clear text from selected','做法':'Method',
+  '凸起（文字立起来）':'Raised (text stands up)','嵌入（凹进去再用 2 号色填平）':'Inlay (recessed, filled flush with color 2)',
+  '镂空（字穿透盒底，单色）':'Cut-through (through the floor, one color)',
+  '上传 .ttf / .otf（中文字体）…':'Upload .ttf / .otf (CJK font) …','双色':'Two-color',
+  '文字走 2 号槽颜色（不勾 = 和盒体同色）':'Text uses slot 2 color (unchecked = same as box)',
+  '凸起 = 字立在格底；嵌入 = 字凹进格底再用 2 号色填平（深度最多到底厚 −0.4）；镂空 = 字挖穿盒底，O/A/B 中间自动加桥。没选格子时点按钮 = 所有格子都加。字号是上限，格子放不下会自动缩小。可多行。':
+    'Raised = text stands on the cell floor; Inlay = recessed into the floor and filled with color 2 (depth up to floor − 0.4); Cut-through = cut through the floor, with bridges auto-added inside O/A/B. With no cells selected the button applies to all cells. Font size is a maximum; text shrinks to fit. Multi-line OK.',
+  '颜色':'Colors','盒体 槽1':'Box · slot 1',
+  '一体式一次打印、底部封实。盒体走 1 号槽，格底文字走 2 号槽。':'Prints in one piece with a solid floor. Box uses slot 1, floor text uses slot 2.',
+  '名字':'Name',
+  '手写连笔体（Pacifico）字母天然相连，最适合做挂件。用不连笔的字体要靠描边或底部连接条串起来。':
+    'Script fonts (Pacifico) connect letters naturally — best for keychains. Other fonts need the outline or the bottom bar to hold letters together.',
+  '倾斜':'Slant','叠色层 · 从下往上':'Color layers · bottom to top','乐高风 4 色':'LEGO-style 4 colors','3 色':'3 colors','单色':'1 color',
+  '槽 · 颜色':'Slot · color','外扩':'Offset','厚度':'Thickness','连接条':'Connector bar','底层加一条把字串起来':'Add a bar on the base to join letters',
+  '每层 = 字形向外扩一圈，越往上越窄，露出一道道色边。外扩 0 就是字本身。第 1 层是底板（带挂环）；第 N 层走 N 号料槽，A1 + AMS lite 最多 4 色。':
+    'Each layer = the letters grown outward; each higher layer is narrower, showing colored rims. Offset 0 = the letters themselves. Layer 1 is the base (with ring); layer N uses slot N. A1 + AMS lite: up to 4 colors.',
+  '挂环':'Ring','外径':'Outer dia.','孔径':'Hole dia.','位置':'Position','左端':'Left end','右端':'Right end',
+  '导出':'Export','文件名':'File name',
+  '导出的 3MF 内嵌 569 项双卷 PLA 工程配置，Bambu Studio 双击即切。':'The 3MF embeds a 569-setting two-filament PLA project config — double-click to slice in Bambu Studio.',
+  '初始化…':'Initializing…','导出 3MF':'Export 3MF','参数自动保存在本浏览器，刷新不丢':'Settings auto-save in this browser',
+  '清空保存的参数，回到默认':'Clear saved settings and restore defaults','恢复默认':'Restore defaults',
+  '左键旋转 · 滚轮缩放 · 右键/Shift 平移':'Left-drag rotate · scroll zoom · right/Shift pan','生成中…':'Generating…',
+  '深色 / 浅色':'Dark / light','水密 ✓':'Watertight ✓','不可导出':'Cannot export','构建异常':'Build error','1 (一体)':'1 (one piece)',
+  'Roboto Black · 粗黑无衬线':'Roboto Black · heavy sans','Source Sans Pro · 常规无衬线':'Source Sans Pro · regular sans',
+  'Fira Sans Medium · 中粗无衬线':'Fira Sans Medium · medium sans','Pacifico · 手写连笔（挂件首选）':'Pacifico · script (best for keychains)',
+  '外扩 mm':'Offset mm','厚度 mm':'Thickness mm',
+  '清空所有已保存的参数，回到默认？':'Clear all saved settings and restore defaults?',
+  '至少要开一层。':'Enable at least one layer.','字体未就绪。':'Font not ready.','请输入要做的名字。':'Please enter a name.',
+  '这些字符在当前字体里没有字形。':'These characters have no glyphs in the current font.','字形并集为空。':'Glyph union is empty.',
+  '挂孔太大，已收到外径的一半以内。':'Ring hole too big; reduced to within half the outer diameter.',
+  '挖孔后底板为空，请调小挂孔。':'Nothing left of the base after the hole; make the ring hole smaller.',
+  '没有可挤出的文字（文本为空或字体未就绪），本次只导出底板。':'No text to extrude (empty text or font not ready); exporting the plate only.',
+  '字号必须大于 0。':'Font size must be greater than 0.','挂孔径必须小于挂环外径。':'Ring hole must be smaller than the ring’s outer diameter.',
+  '第 1 层（底板）外扩至少 0.4mm，否则挂环连不上。':'Layer 1 (base) offset must be at least 0.4mm or the ring won’t connect.',
+  '外扩量不能为负。':'Offset can’t be negative.','长宽必须大于 0。':'Length and width must be greater than 0.',
+  '板厚至少 0.2mm。':'Plate thickness must be at least 0.2mm.',
+  '双色嵌入要求板厚至少 0.6mm（嵌入 0.2 + 下面留 0.4）。':'Two-color inlay needs a plate at least 0.6mm thick (0.2 inlay + 0.4 below).','字凸起至少 0.1mm。':'Text height must be at least 0.1mm.',
+  '壁厚至少 0.4mm（喷嘴直径）。':'Wall must be at least 0.4mm (nozzle width).','底厚至少 0.4mm。':'Floor must be at least 0.4mm.',
+  '总高必须大于底厚。':'Total height must exceed the floor thickness.','没有生成任何几何。':'No geometry was generated.'
+};
+var I18N_RULES=[
+  [/文字超出页边距 ([\d.]+)×([\d.]+)mm > 可用 ([\d.]+)×([\d.]+)mm，请调小字号或勾选自动缩放。/g,'Text exceeds the margins: $1×$2mm > available $3×$4mm. Reduce the font size or turn on Auto-fit.'],
+  [/嵌入深度已限制到 ([-\d.]+)mm（(板厚|底厚) ([\d.]+)mm，下面至少留 0.4mm）。/g,function(_,d,k,t){ return 'Inlay depth limited to '+d+'mm ('+(k==='板厚'?'plate':'floor')+' is '+t+'mm; at least 0.4mm must remain below).'; }],
+  [/镂空后仍有 (\d+) 块互不相连，会掉出来，请加大桥宽。/g,'$1 loose pieces remain after cutting and will fall out — increase the bridge width.'],
+  [/连接桥 ([\d.]+)mm 偏细，可能一掰就断，建议 ≥1mm。/g,'Bridge $1mm is thin and may snap; ≥1mm recommended.'],
+  [/镂空板只有 ([\d.]+)mm，字间细条容易断，建议 ≥1.5mm。/g,'Stencil plate is only $1mm; thin strips between letters may break. ≥1.5mm recommended.'],
+  [/文字已自动缩放到 (\d+)% 以适配边距。/g,'Text auto-scaled to $1% to fit the margins.'],
+  [/第 (\d+) 层外扩量必须小于下面一层（每层都要比下层窄）。/g,'Layer $1 offset must be smaller than the layer below (each layer narrower than the one under it).'],
+  [/第 (\d+)\/(\d+) 层外扩量只差 ([\d.]+)mm，露出的色边不到两道线宽\(0.8\)，可能印不出来。/g,'Layers $1/$2 offsets differ by only $3mm — the visible rim is under two line widths (0.8) and may not print.'],
+  [/底板分成 (\d+) 块（字之间断开），打出来是散的。/g,'The base is in $1 separate pieces (letters not connected) and will print loose. '],
+  [/加大底层外扩量，或换连笔字体。/g,'Increase the base offset or use a script font.'],
+  [/勾上「底部连接条」或加大底层外扩量。/g,'Turn on “Connector bar” or increase the base offset.'],
+  [/第 (\d+) 层与下层没有交集，已跳过。/g,'Layer $1 doesn’t overlap the layer below; skipped.'],
+  [/底层只有 ([\d.]+)mm，挂钥匙容易掰断，建议 ≥1.6mm。/g,'Base is only $1mm and may snap on a keyring; ≥1.6mm recommended.'],
+  [/底厚 ([\d.]+)mm 必须小于总高 ([\d.]+)mm。/g,'Floor $1mm must be less than total height $2mm.'],
+  [/分格太密: 单格净尺寸 ([-\d.]+)×([-\d.]+)mm ≤ 0，请减少行列数或壁厚。/g,'Too many cells: clear size $1×$2mm ≤ 0. Reduce rows/columns or wall thickness.'],
+  [/圆孔 ⌀([\d.]+)mm 放不进 ([\d.]+)×([\d.]+)mm 的格子（四周至少留 0.4mm）。/g,'Round pocket ⌀$1mm doesn’t fit a $2×$3mm cell (needs 0.4mm all around).'],
+  [/孔深 ([\d.]+)mm 太深：盒高只有 ([\d.]+)mm，孔底下至少要留 0.8mm。/g,'Pocket depth $1mm is too deep: the box is only $2mm tall and at least 0.8mm must remain below.'],
+  [/当前字体没有「(.*?)」这些字（内置字体只有西文），会被跳过。要中文请在「格底文字 → 字体」旁边上传中文 .ttf\/.otf。/g,'The current font has no “$1” (built-in fonts are Latin only); they’ll be skipped. For Chinese, upload a CJK .ttf/.otf under “Cell floor text → Font”.'],
+  [/格子太小，文字「(.*?)」缩到 ([\d.]+)mm 宽，可能印不清。/g,'Cell too small: “$1” shrank to $2mm wide and may not print legibly.'],
+  [/壁厚 ([\d.]+)mm 不足 2 圈 0.4 喷嘴壁宽，打印可能偏脆。/g,'Wall $1mm is under two 0.4mm nozzle lines and may be fragile.'],
+  [/孔深 ([\d.]+)mm 不到球径 30%，钢球容易滚出来。/g,'Pocket depth $1mm is under 30% of the ball diameter; balls may roll out.'],
+  [/文字凸起 ([\d.]+)mm 高过格子深度，会冒出盒口。/g,'Raised text $1mm is taller than the cell depth and will stick out of the box.'],
+  [/第 (\d+) 层厚度至少 0.2mm（一层层高）。/g,'Layer $1 must be at least 0.2mm thick (one layer height).'],
+  [/外形 ([\d.]+)×([\d.]+)mm 超过打印床可用范围 ([\d.]+)mm，无法切片。/g,'Size $1×$2mm exceeds the usable bed area $3mm and can’t be sliced.'],
+  [/外形 ([\d.]+)×([\d.]+)mm 超过 ([\d.]+)mm 保守上限：贴近 A1 幅面边界，务必在 Bambu Studio 里确认摆放未压边。/g,'Size $1×$2mm exceeds the $3mm safe limit and is close to the A1 bed edge — check placement in Bambu Studio.'],
+  [/字凸起 ([\d.]+)mm 小于一层高\(0.2\)，可能印不出来。/g,'Text height $1mm is below one layer (0.2) and may not print.'],
+  [/网格非水密（未配对边 (\d+)，退化面 (\d+)），已阻止导出。/g,'Mesh not watertight ($1 unpaired edges, $2 degenerate faces); export blocked.'],
+  // 状态栏
+  [/三角面 /g,'Triangles '],[/ · 顶点 /g,' · Vertices '],[/ · 部件 /g,' · Parts '],
+  [/双色嵌入 · 深 ([-\d.]+)mm · 表面齐平/g,'Two-color inlay · depth $1mm · flush surface'],
+  [/单色镂空 · 自动连接桥 (\d+) 道/g,'Stencil · $1 auto bridges'],
+  [/字形块 /g,'Glyph groups '],[/ · 文字 /g,' · Text '],[/ · 缩放 /g,' · Scale '],
+  [/(\d+) 层叠色 · 外形 /g,'$1 layers · size '],[/ · 连通块 /g,' · Pieces '],
+  [/格数 /g,'Cells '],[/ · 基本格净 /g,' · Base cell inner '],
+  [/ · 圆孔 (\d+) 个 球⌀/g,' · $1 round pockets ⌀'],[/ 口⌀/g,' opening ⌀'],[/ 深([\d.]+)/g,' depth $1'],
+  [/ 球面/g,' spherical'],[/ 平底/g,' flat'],
+  [/ · 格底文字 (\d+) 处（(凸起|嵌入|镂空)）/g,function(_,n,m){ return ' · Floor text ×'+n+' ('+({'凸起':'raised','嵌入':'inlay','镂空':'cut-through'})[m]+')'; }],
+  [/槽(\d) /g,'Slot $1 '],[/ · 全 PLA/g,' · all PLA'],
+  [/左键旋转 · 滚轮缩放 · 右键\/Shift 平移/g,'Left-drag rotate · scroll zoom · right/Shift pan'],
+  // 分格图
+  [/内腔 ([\d.]+) × ([\d.]+) mm（(\d+)×(\d+) 合并后均分 (\d+) 格）/g,'Inner $1 × $2 mm ($3×$4 merged, split into $5)'],
+  [/圆孔 ⌀([\d.]+) mm（格子 ([\d.]+)×([\d.]+)）/g,'Round pocket ⌀$1 mm (cell $2×$3)'],
+  [/内腔 /g,'Inner '],[/均分 (\d+)\/(\d+)/g,'Split $1/$2'],[/(\d+)×(\d+) 合并/g,'$1×$2 merged'],
+  [/启用第 (\d+) 层/g,'Enable layer $1'],[/^上传: /,'Uploaded: '],
+  // 弹窗
+  [/^已保存 (.*?)\.3mf\.zip[\s\S]*$/,'Saved $1.3mf.zip\n\n⚠ Don’t double-click this .zip — a Mac will unzip it into a folder.\nRight-click → Rename, delete the trailing .zip (choose “Use .3mf” when asked), then double-click to slice.\n\nIf Safari unzipped it automatically: Safari Settings → General → uncheck “Open ‘safe’ files after downloading”.\nTo skip renaming, export from the local label-bin-generator.html, which saves a .3mf directly.'],
+  [/这个页面里无法下载（(.*?)）。请用本地 label-bin-generator.html 导出。/g,'Downloads aren’t possible on this page ($1). Please export from the local label-bin-generator.html.'],
+  [/^导出失败: /,'Export failed: '],[/^字体解析失败: /,'Failed to parse font: '],[/\n（请用 .ttf \/ .otf，不支持 woff2）/g,'\n(Use .ttf / .otf; woff2 isn’t supported)']
+];
+var CJK=/[㐀-鿿！-｠]/;
+var LANG='zh', i18nOrig=new WeakMap(), i18nBusy=false;
+function trText(s){
+  if(!CJK.test(s)) return s;
+  var m=/^(\s*(?:[✕!] )?)([\s\S]*?)(\s*)$/.exec(s);   // 提示条前面带 ✕ / !
+  if(I18N_EXACT.hasOwnProperty(m[2])) return m[1]+I18N_EXACT[m[2]]+m[3];
+  for(var i=0;i<I18N_RULES.length;i++) s=s.replace(I18N_RULES[i][0],I18N_RULES[i][1]);
+  return s;
+}
+function tr(s){ return LANG==='en' ? trText(String(s)) : s; }
+function i18nSkip(n){
+  for(var e=n.nodeType===1?n:n.parentNode; e; e=e.parentNode){
+    if(e.nodeType!==1) continue;
+    var t=e.tagName; if(t==='TEXTAREA'||t==='SCRIPT'||t==='STYLE') return true;
+    if(e.classList.contains('glbl') || e.id==='topbar') return true;
+  }
+  return false;
+}
+/* 每个文本节点/属性记下 {zh, en}; JS 之后改了内容 (≠ 我们写的 en) 就当成新的中文原文 */
+function i18nNode(n){
+  var o=i18nOrig.get(n);
+  if(LANG==='en'){
+    if(o && n.nodeValue===o.en) return;
+    var en=trText(n.nodeValue); if(en===n.nodeValue) return;
+    i18nOrig.set(n,{zh:n.nodeValue,en:en}); n.nodeValue=en;
+  }else if(o && n.nodeValue===o.en){ n.nodeValue=o.zh; }
+}
+function i18nAttr(el,a){
+  var key='_i18n_'+a, o=el[key], v=el.getAttribute(a); if(v==null) return;
+  if(LANG==='en'){
+    if(o && v===o.en) return;
+    var en=trText(v); if(en===v) return;
+    el[key]={zh:v,en:en}; el.setAttribute(a,en);
+  }else if(o && v===o.en) el.setAttribute(a,o.zh);
+}
+function i18nTree(root){
+  if(i18nSkip(root)) return;
+  if(root.nodeType===3){ i18nNode(root); return; }
+  if(root.nodeType!==1) return;
+  ['title','placeholder'].forEach(function(a){ if(root.hasAttribute(a)) i18nAttr(root,a); });
+  var w=document.createTreeWalker(root, NodeFilter.SHOW_TEXT|NodeFilter.SHOW_ELEMENT, {acceptNode:function(n){
+    if(n.nodeType===1){ var t=n.tagName; return (t==='TEXTAREA'||t==='SCRIPT'||t==='STYLE'||n.classList.contains('glbl')||n.id==='topbar')?NodeFilter.FILTER_REJECT:NodeFilter.FILTER_ACCEPT; }
+    return NodeFilter.FILTER_ACCEPT; }});
+  for(var n=w.nextNode(); n; n=w.nextNode()){
+    if(n.nodeType===3) i18nNode(n);
+    else { if(n.hasAttribute('title')) i18nAttr(n,'title'); if(n.hasAttribute('placeholder')) i18nAttr(n,'placeholder'); }
+  }
+}
+function setLang(l){
+  LANG = l==='en'?'en':'zh';
+  document.documentElement.lang = LANG==='en'?'en':'zh-CN';
+  i18nBusy=true; i18nTree(document.head.querySelector('title')); i18nTree(document.body); i18nBusy=false;
+  document.querySelectorAll('#langBtn span[data-l]').forEach(function(s){ s.classList.toggle('on', s.dataset.l===LANG); });
+  try{ localStorage.setItem('3dgen-lang',LANG); }catch(e){}
+}
+function setTheme(t){
+  document.documentElement.dataset.theme = t==='light'?'light':'dark';
+  $('themeIco').setAttribute('d', t==='light'
+    ? 'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z'                       // 浅色时显示月亮 = 点了变深色
+    : 'M12 4V2M12 22v-2M4 12H2M22 12h-2M5.6 5.6 4.2 4.2M19.8 19.8l-1.4-1.4M5.6 18.4l-1.4 1.4M19.8 4.2l-1.4 1.4M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10z');
+  try{ localStorage.setItem('3dgen-theme',t); }catch(e){}
+  themeView();
+}
+function initPrefs(){
+  setTheme(document.documentElement.dataset.theme);
+  $('themeBtn').addEventListener('click',function(){ setTheme(document.documentElement.dataset.theme==='light'?'dark':'light'); });
+  $('langBtn').addEventListener('click',function(){ setLang(LANG==='en'?'zh':'en'); });
+  var _alert=window.alert.bind(window), _confirm=window.confirm.bind(window);
+  window.alert=function(s){ return _alert(tr(s)); };
+  window.confirm=function(s){ return _confirm(tr(s)); };
+  new MutationObserver(function(list){
+    if(LANG!=='en' || i18nBusy) return;
+    i18nBusy=true;
+    list.forEach(function(r){
+      if(r.type==='characterData') i18nTree(r.target);
+      else if(r.type==='attributes') i18nTree(r.target);
+      else r.addedNodes.forEach(i18nTree);
+    });
+    i18nBusy=false;
+  }).observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['title','placeholder']});
+  var l=null; try{ l=localStorage.getItem('3dgen-lang'); }catch(e){}
+  if(l!=='en' && l!=='zh') l=/^zh/i.test(navigator.language||'zh')?'zh':'en';
+  setLang(l);
 }
 
 /* ===== 自动保存: 所有输入框 + 当前页签 + 合并格 + 圆孔 + 字体, 存在本浏览器 =====
